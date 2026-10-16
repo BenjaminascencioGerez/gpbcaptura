@@ -30,7 +30,7 @@ export type ParsedPartidaRow = {
 };
 
 function resolveValue(cell: ExcelJS.Cell | undefined): unknown {
-  let v = cell?.value;
+  let v: unknown = cell?.value;
   // Formula cells come back as { formula, result } — unwrap to the computed result.
   if (v && typeof v === "object" && "result" in v) {
     v = (v as { result: unknown }).result;
