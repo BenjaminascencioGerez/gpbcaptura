@@ -18,8 +18,6 @@ import type { Partida } from "@/lib/types";
 
 const FIELDS: { name: keyof Partida; label: string; span?: 1 | 2 }[] = [
   { name: "no_partida", label: "No. Partida" },
-  { name: "fraccion_arancelaria", label: "Fracción Arancelaria" },
-  { name: "nico", label: "NICO" },
   { name: "cant_factura", label: "Cant. Factura" },
   { name: "um_comercial", label: "UM Comercial" },
   { name: "marca", label: "Marca" },
@@ -31,7 +29,6 @@ const FIELDS: { name: keyof Partida; label: string; span?: 1 | 2 }[] = [
   { name: "precio_unitario", label: "Precio Unitario" },
   { name: "total", label: "Total" },
   { name: "id_cat_no_art_no", label: "ID / CAT. NO. / ART. NO." },
-  { name: "aplica_ma", label: "Aplica MA" },
 ];
 
 const NUMERIC_FIELDS = new Set(["no_partida", "cant_factura", "peso", "precio_unitario", "total"]);

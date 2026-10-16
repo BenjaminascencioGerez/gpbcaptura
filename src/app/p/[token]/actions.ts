@@ -8,41 +8,53 @@ export async function uploadPartidaPhoto(
   _prevState: { error: string } | null,
   formData: FormData
 ) {
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) {
-    return { error: "Selecciona o toma una foto." };
+  const files = formData.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
+  if (files.length === 0) {
+    return { error: "Selecciona o toma al menos una foto." };
   }
 
   const admin = createAdminClient();
 
   const { data: partida, error: findError } = await admin
     .from("partidas")
-    .select("id, no_partida, previo_id")
+    .select("id, no_partida, previo_id, photo_url")
     .eq("photo_token", token)
     .single();
 
   if (findError || !partida) return { error: "Link inválido o expirado." };
 
-  const ext = file.name.split(".").pop() || "jpg";
-  const path = `${partida.previo_id}/${partida.id}-${Date.now()}.${ext}`;
+  let coverUrl = partida.photo_url as string | null;
 
-  const { error: uploadError } = await admin.storage
-    .from("partida-photos")
-    .upload(path, await file.arrayBuffer(), {
-      contentType: file.type || "image/jpeg",
-      upsert: false,
+  for (const file of files) {
+    const ext = file.name.split(".").pop() || "jpg";
+    const path = `${partida.previo_id}/${partida.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    const isPhoto = file.type.startsWith("image/");
+
+    const { error: uploadError } = await admin.storage
+      .from("partida-photos")
+      .upload(path, await file.arrayBuffer(), {
+        contentType: file.type || "application/octet-stream",
+        upsert: false,
+      });
+
+    if (uploadError) return { error: `No se pudo subir "${file.name}": ${uploadError.message}` };
+
+    const { data: publicUrl } = admin.storage.from("partida-photos").getPublicUrl(path);
+
+    await admin.from("partida_attachments").insert({
+      partida_id: partida.id,
+      file_url: publicUrl.publicUrl,
+      file_type: isPhoto ? "photo" : "document",
+      uploaded_via: "public_link",
     });
 
-  if (uploadError) return { error: `No se pudo subir la foto: ${uploadError.message}` };
+    if (isPhoto && !coverUrl) coverUrl = publicUrl.publicUrl;
+  }
 
-  const { data: publicUrl } = admin.storage.from("partida-photos").getPublicUrl(path);
-
-  const { error: updateError } = await admin
+  await admin
     .from("partidas")
-    .update({ photo_url: publicUrl.publicUrl, photo_uploaded_at: new Date().toISOString() })
+    .update({ photo_url: coverUrl, photo_uploaded_at: new Date().toISOString() })
     .eq("id", partida.id);
-
-  if (updateError) return { error: updateError.message };
 
   revalidatePath(`/previos/${partida.previo_id}`);
   return { error: "", success: true as const };

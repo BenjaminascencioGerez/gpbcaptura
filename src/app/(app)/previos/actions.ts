@@ -3,8 +3,13 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { parsePrevioExcel } from "@/lib/previo-excel";
+import { isReadOnly } from "@/lib/roles";
+import { getCurrentRole } from "@/lib/roles-server";
 
 export async function createPrevioManual(_prevState: { error: string } | null, formData: FormData) {
+  const role = await getCurrentRole();
+  if (isReadOnly(role)) return { error: "Tu rol (Ejecutivo) solo tiene acceso de lectura." };
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -35,6 +40,9 @@ export async function createPrevioManual(_prevState: { error: string } | null, f
 }
 
 export async function importPrevioExcel(_prevState: { error: string } | null, formData: FormData) {
+  const role = await getCurrentRole();
+  if (isReadOnly(role)) return { error: "Tu rol (Ejecutivo) solo tiene acceso de lectura." };
+
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     return { error: "Selecciona un archivo .xlsx." };

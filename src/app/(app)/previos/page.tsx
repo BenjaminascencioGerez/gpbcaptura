@@ -12,9 +12,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { Previo } from "@/lib/types";
+import { isReadOnly } from "@/lib/roles";
+import { getCurrentRole } from "@/lib/roles-server";
 
 export default async function PreviosPage() {
   const supabase = await createClient();
+  const role = await getCurrentRole();
   const { data: previos } = await supabase
     .from("previos")
     .select("*")
@@ -25,9 +28,11 @@ export default async function PreviosPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Previos</h1>
-        <Button nativeButton={false} render={<Link href="/previos/new" />}>
-          Nuevo previo
-        </Button>
+        {!isReadOnly(role) && (
+          <Button nativeButton={false} render={<Link href="/previos/new" />}>
+            Nuevo previo
+          </Button>
+        )}
       </div>
 
       <Card>

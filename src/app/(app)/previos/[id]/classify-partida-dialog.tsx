@@ -1,0 +1,118 @@
+"use client";
+
+import { useActionState, useEffect, useState } from "react";
+import { classifyPartida } from "./actions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { ClasificacionArancelaria, Partida } from "@/lib/types";
+
+export function ClassifyPartidaDialog({
+  previoId,
+  partida,
+  catalogo,
+  trigger,
+}: {
+  previoId: string;
+  partida: Partida;
+  catalogo: ClasificacionArancelaria[];
+  trigger: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [fraccion, setFraccion] = useState(partida.fraccion_arancelaria ?? "");
+  const [nico, setNico] = useState(partida.nico ?? "");
+  const [regulaciones, setRegulaciones] = useState(partida.aplica_ma ?? "");
+
+  const action = classifyPartida.bind(null, previoId, partida.id);
+  const [state, formAction, pending] = useActionState(action, null);
+
+  useEffect(() => {
+    if (state && !state.error) setOpen(false);
+  }, [state]);
+
+  const catalogItems: Record<string, string> = Object.fromEntries(
+    catalogo.map((c) => [c.id, `${c.fraccion_arancelaria} — ${c.descripcion}`])
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={trigger as React.ReactElement} />
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Clasificar partida {partida.no_partida}</DialogTitle>
+        </DialogHeader>
+        <form action={formAction} className="space-y-4">
+          {catalogo.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>Usar del catálogo</Label>
+              <Select
+                items={catalogItems}
+                onValueChange={(id) => {
+                  const c = catalogo.find((x) => x.id === id);
+                  if (!c) return;
+                  setFraccion(c.fraccion_arancelaria);
+                  setNico(c.nico ?? "");
+                  setRegulaciones(c.regulaciones ?? "");
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Seleccionar..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {catalogo.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.fraccion_arancelaria} — {c.descripcion}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="fraccion_arancelaria">Fracción Arancelaria</Label>
+            <Input
+              id="fraccion_arancelaria"
+              name="fraccion_arancelaria"
+              required
+              value={fraccion}
+              onChange={(e) => setFraccion(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="nico">NICO</Label>
+            <Input id="nico" name="nico" value={nico} onChange={(e) => setNico(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="aplica_ma">Regulaciones / NOM (si aplica)</Label>
+            <Input
+              id="aplica_ma"
+              name="aplica_ma"
+              placeholder="Ej. NOM-004-SCFI"
+              value={regulaciones}
+              onChange={(e) => setRegulaciones(e.target.value)}
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="save_to_catalog" defaultChecked className="size-4" />
+            Guardar en el catálogo del cliente para reutilizar
+          </label>
+          {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
+          <DialogFooter>
+            <Button type="submit" disabled={pending}>
+              {pending ? "Guardando..." : "Marcar como clasificado"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -18,6 +18,12 @@ export default async function PartidaPhotoPage({ params }: { params: Promise<{ t
 
   const previo = partida.previos as unknown as { reference: string; cliente: string | null } | null;
 
+  const { data: attachments } = await admin
+    .from("partida_attachments")
+    .select("*")
+    .eq("partida_id", partida.id)
+    .order("uploaded_at", { ascending: false });
+
   return (
     <div className="flex min-h-screen items-center justify-center p-4 bg-muted/30">
       <Card className="w-full max-w-md">
@@ -52,15 +58,34 @@ export default async function PartidaPhotoPage({ params }: { params: Promise<{ t
             )}
           </div>
 
-          {partida.photo_url && (
+          {attachments && attachments.length > 0 && (
             <div className="space-y-1.5">
-              <p className="text-xs text-muted-foreground">Foto actual:</p>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={partida.photo_url}
-                alt={`Foto partida ${partida.no_partida}`}
-                className="w-full rounded-lg border object-cover"
-              />
+              <p className="text-xs text-muted-foreground">
+                Ya subidos ({attachments.length}):
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {attachments.map((a) =>
+                  a.file_type === "photo" ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={a.id}
+                      src={a.file_url}
+                      alt={`Adjunto partida ${partida.no_partida}`}
+                      className="aspect-square w-full rounded-lg border object-cover"
+                    />
+                  ) : (
+                    <a
+                      key={a.id}
+                      href={a.file_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex aspect-square items-center justify-center rounded-lg border bg-muted text-xs text-muted-foreground p-2 text-center"
+                    >
+                      Documento
+                    </a>
+                  )
+                )}
+              </div>
             </div>
           )}
 

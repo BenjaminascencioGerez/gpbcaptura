@@ -1,21 +1,27 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CameraIcon, LinkIcon, PlusIcon } from "lucide-react";
+import { PaperclipIcon, PlusIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { Partida, Previo } from "@/lib/types";
+import type { ClasificacionArancelaria, Partida, PartidaAttachment, Previo } from "@/lib/types";
+import { canClassify, canGlosar, isReadOnly } from "@/lib/roles";
+import { getCurrentRole } from "@/lib/roles-server";
 import { PrevioHeaderForm } from "./previo-header-form";
 import { PartidaFormDialog } from "./partida-form-dialog";
 import { PartidaLinkDialog } from "./partida-link-dialog";
 import { DeletePartidaButton } from "./delete-partida-button";
 import { SendToFacturacionButton } from "./send-to-facturacion-button";
+import { ClassifyPartidaDialog } from "./classify-partida-dialog";
+import { GlosarPartidaDialog } from "./glosar-partida-dialog";
 
 export default async function PrevioDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
+  const role = await getCurrentRole();
+  const readOnly = isReadOnly(role);
 
   const { data: previo } = await supabase
     .from("previos")
@@ -33,6 +39,27 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
     .returns<Partida[]>();
 
   const rows = partidas ?? [];
+  const partidaIds = rows.map((p) => p.id);
+
+  const { data: attachmentsData } = partidaIds.length
+    ? await supabase.from("partida_attachments").select("*").in("partida_id", partidaIds).returns<PartidaAttachment[]>()
+    : { data: [] as PartidaAttachment[] };
+
+  const attachmentsByPartida = new Map<string, PartidaAttachment[]>();
+  for (const a of attachmentsData ?? []) {
+    const list = attachmentsByPartida.get(a.partida_id) ?? [];
+    list.push(a);
+    attachmentsByPartida.set(a.partida_id, list);
+  }
+
+  const { data: catalogo } = previo.cliente
+    ? await supabase
+        .from("clasificaciones_arancelarias")
+        .select("*")
+        .eq("cliente", previo.cliente)
+        .order("fraccion_arancelaria")
+        .returns<ClasificacionArancelaria[]>()
+    : { data: [] as ClasificacionArancelaria[] };
 
   return (
     <div className="space-y-6">
@@ -48,7 +75,9 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
             </Badge>
           </h1>
         </div>
-        <SendToFacturacionButton previoId={previo.id} disabled={previo.status === "sent"} />
+        {!readOnly && (
+          <SendToFacturacionButton previoId={previo.id} disabled={previo.status === "sent"} />
+        )}
       </div>
 
       <Card>
@@ -56,22 +85,24 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
           <CardTitle className="text-base">Encabezado</CardTitle>
         </CardHeader>
         <CardContent>
-          <PrevioHeaderForm previo={previo} />
+          <PrevioHeaderForm previo={previo} readOnly={readOnly} />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="text-base">Partidas ({rows.length})</CardTitle>
-          <PartidaFormDialog
-            previoId={previo.id}
-            nextNoPartida={rows.length + 1}
-            trigger={
-              <Button size="sm" variant="outline">
-                <PlusIcon className="size-4" /> Nueva partida
-              </Button>
-            }
-          />
+          {!readOnly && (
+            <PartidaFormDialog
+              previoId={previo.id}
+              nextNoPartida={rows.length + 1}
+              trigger={
+                <Button size="sm" variant="outline">
+                  <PlusIcon className="size-4" /> Nueva partida
+                </Button>
+              }
+            />
+          )}
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           <Table>
@@ -79,69 +110,101 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
               <TableRow>
                 <TableHead>No.</TableHead>
                 <TableHead>Descripción</TableHead>
-                <TableHead>Marca / Modelo</TableHead>
-                <TableHead>Peso</TableHead>
-                <TableHead>P. Unitario</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Foto</TableHead>
+                <TableHead>Fracción</TableHead>
+                <TableHead>Clasificación</TableHead>
+                <TableHead>Glosa</TableHead>
+                <TableHead>Adjuntos</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-medium">{p.no_partida}</TableCell>
-                  <TableCell className="max-w-xs truncate" title={p.descripcion_aa ?? ""}>
-                    {p.descripcion_aa ?? "—"}
-                  </TableCell>
-                  <TableCell>
-                    {[p.marca, p.modelo].filter(Boolean).join(" / ") || "—"}
-                  </TableCell>
-                  <TableCell>{p.peso ?? "—"}</TableCell>
-                  <TableCell>{p.precio_unitario ?? "—"}</TableCell>
-                  <TableCell>{p.total ?? "—"}</TableCell>
-                  <TableCell>
-                    {p.photo_url ? (
-                      <a href={p.photo_url} target="_blank" rel="noreferrer">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={p.photo_url}
-                          alt={`Foto partida ${p.no_partida}`}
-                          className="size-10 rounded object-cover border"
-                        />
-                      </a>
-                    ) : (
-                      <Badge variant="secondary">Sin foto</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1 justify-end">
+              {rows.map((p) => {
+                const attachments = attachmentsByPartida.get(p.id) ?? [];
+                return (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium">{p.no_partida}</TableCell>
+                    <TableCell className="max-w-xs truncate" title={p.descripcion_aa ?? ""}>
+                      {p.descripcion_aa ?? "—"}
+                    </TableCell>
+                    <TableCell>{p.fraccion_arancelaria ?? "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant={p.classification_status === "clasificado" ? "default" : "secondary"}>
+                        {p.classification_status === "clasificado" ? "Clasificado" : "Pendiente"}
+                      </Badge>
+                      {p.aplica_ma && (
+                        <div className="text-xs text-muted-foreground mt-1">{p.aplica_ma}</div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={p.glosado ? "default" : "secondary"}>
+                        {p.glosado ? "Glosada" : "Pendiente"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
                       <PartidaLinkDialog
+                        previoId={previo.id}
+                        partidaId={p.id}
                         token={p.photo_token}
                         noPartida={p.no_partida}
+                        attachments={attachments}
+                        readOnly={readOnly}
                         trigger={
-                          <Button variant="ghost" size="icon-sm" title="Link / QR para foto">
-                            {p.photo_url ? <LinkIcon className="size-4" /> : <CameraIcon className="size-4" />}
+                          <Button variant="ghost" size="icon-sm" title="Adjuntos / link para foto">
+                            <PaperclipIcon className="size-4" />
+                            {attachments.length > 0 && (
+                              <span className="ml-0.5 text-xs">{attachments.length}</span>
+                            )}
                           </Button>
                         }
                       />
-                      <PartidaFormDialog
-                        previoId={previo.id}
-                        partida={p}
-                        trigger={
-                          <Button variant="ghost" size="sm">
-                            Editar
-                          </Button>
-                        }
-                      />
-                      <DeletePartidaButton previoId={previo.id} partidaId={p.id} />
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1 justify-end flex-wrap">
+                        {canClassify(role) && (
+                          <ClassifyPartidaDialog
+                            previoId={previo.id}
+                            partida={p}
+                            catalogo={catalogo ?? []}
+                            trigger={
+                              <Button variant="ghost" size="sm">
+                                Clasificar
+                              </Button>
+                            }
+                          />
+                        )}
+                        {canGlosar(role) && p.classification_status === "clasificado" && (
+                          <GlosarPartidaDialog
+                            previoId={previo.id}
+                            partida={p}
+                            trigger={
+                              <Button variant="ghost" size="sm">
+                                Glosar
+                              </Button>
+                            }
+                          />
+                        )}
+                        {!readOnly && (
+                          <>
+                            <PartidaFormDialog
+                              previoId={previo.id}
+                              partida={p}
+                              trigger={
+                                <Button variant="ghost" size="sm">
+                                  Editar
+                                </Button>
+                              }
+                            />
+                            <DeletePartidaButton previoId={previo.id} partidaId={p.id} />
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     Sin partidas todavía.
                   </TableCell>
                 </TableRow>

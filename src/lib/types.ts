@@ -39,4 +39,31 @@ export type Partida = {
   photo_uploaded_at: string | null;
   sort_order: number;
   created_at: string;
+  classification_status: "pendiente" | "clasificado";
+  clasificado_by: string | null;
+  clasificado_at: string | null;
+  glosado: boolean;
+  glosado_by: string | null;
+  glosado_at: string | null;
+  notas_glosa: string | null;
+};
+
+export type ClasificacionArancelaria = {
+  id: string;
+  cliente: string;
+  fraccion_arancelaria: string;
+  nico: string | null;
+  descripcion: string;
+  regulaciones: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type PartidaAttachment = {
+  id: string;
+  partida_id: string;
+  file_url: string;
+  file_type: "photo" | "document";
+  uploaded_via: "public_link" | "office";
+  uploaded_at: string;
 };
