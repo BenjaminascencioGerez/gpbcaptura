@@ -34,6 +34,8 @@ export type Partida = {
   total: number | null;
   id_cat_no_art_no: string | null;
   aplica_ma: string | null;
+  kilos_por_pieza: number | null;
+  umt: string | null;
   photo_url: string | null;
   photo_token: string;
   photo_uploaded_at: string | null;
@@ -55,6 +57,7 @@ export type ClasificacionArancelaria = {
   nico: string | null;
   descripcion: string;
   regulaciones: string | null;
+  photo_url: string | null;
   created_by: string | null;
   created_at: string;
 };

@@ -23,6 +23,8 @@ type PartidaInput = {
   precio_unitario: number | null;
   total: number | null;
   id_cat_no_art_no: string | null;
+  kilos_por_pieza: number | null;
+  umt: string | null;
 };
 
 function fromFormData(previoId: string, formData: FormData, sortOrder: number): PartidaInput {
@@ -49,6 +51,8 @@ function fromFormData(previoId: string, formData: FormData, sortOrder: number): 
     precio_unitario: num("precio_unitario"),
     total: num("total"),
     id_cat_no_art_no: str("id_cat_no_art_no"),
+    kilos_por_pieza: num("kilos_por_pieza"),
+    umt: str("umt"),
   };
 }
 
@@ -172,13 +176,18 @@ export async function classifyPartida(
   if (error) return { error: error.message };
 
   if (saveToCatalog && previo?.cliente) {
-    const { data: partida } = await supabase.from("partidas").select("descripcion_aa, no_partida").eq("id", partidaId).single();
+    const { data: partida } = await supabase
+      .from("partidas")
+      .select("descripcion_aa, no_partida, photo_url")
+      .eq("id", partidaId)
+      .single();
     await supabase.from("clasificaciones_arancelarias").insert({
       cliente: previo.cliente,
       fraccion_arancelaria: fraccion,
       nico,
       descripcion: partida?.descripcion_aa ?? `Partida ${partida?.no_partida ?? ""}`,
       regulaciones,
+      photo_url: partida?.photo_url ?? null,
       created_by: user?.id ?? null,
     });
   }

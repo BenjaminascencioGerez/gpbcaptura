@@ -38,6 +38,7 @@ export default async function CatalogoPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Foto</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Fracción</TableHead>
                 <TableHead>NICO</TableHead>
@@ -49,6 +50,20 @@ export default async function CatalogoPage() {
             <TableBody>
               {rows.map((c) => (
                 <TableRow key={c.id}>
+                  <TableCell>
+                    {c.photo_url ? (
+                      <a href={c.photo_url} target="_blank" rel="noreferrer">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={c.photo_url}
+                          alt={c.descripcion}
+                          className="size-10 rounded object-cover border"
+                        />
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
+                  </TableCell>
                   <TableCell className="font-medium">{c.cliente}</TableCell>
                   <TableCell>{c.fraccion_arancelaria}</TableCell>
                   <TableCell>{c.nico ?? "—"}</TableCell>
@@ -71,7 +86,7 @@ export default async function CatalogoPage() {
               ))}
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={editable ? 6 : 5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={editable ? 7 : 6} className="text-center text-muted-foreground py-8">
                     Catálogo vacío todavía.
                   </TableCell>
                 </TableRow>

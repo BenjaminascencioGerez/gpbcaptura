@@ -31,6 +31,7 @@ export function ClassifyPartidaDialog({
   const [fraccion, setFraccion] = useState(partida.fraccion_arancelaria ?? "");
   const [nico, setNico] = useState(partida.nico ?? "");
   const [regulaciones, setRegulaciones] = useState(partida.aplica_ma ?? "");
+  const [refPhoto, setRefPhoto] = useState<string | null>(null);
 
   const action = classifyPartida.bind(null, previoId, partida.id);
   const [state, formAction, pending] = useActionState(action, null);
@@ -62,6 +63,7 @@ export function ClassifyPartidaDialog({
                   setFraccion(c.fraccion_arancelaria);
                   setNico(c.nico ?? "");
                   setRegulaciones(c.regulaciones ?? "");
+                  setRefPhoto(c.photo_url);
                 }}
               >
                 <SelectTrigger className="w-full">
@@ -75,6 +77,15 @@ export function ClassifyPartidaDialog({
                   ))}
                 </SelectContent>
               </Select>
+              {refPhoto && (
+                <div className="flex items-center gap-2 pt-1">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={refPhoto} alt="Referencia del catálogo" className="size-16 rounded border object-cover" />
+                  <p className="text-xs text-muted-foreground">
+                    Foto de referencia guardada — compárala contra la mercancía actual.
+                  </p>
+                </div>
+              )}
             </div>
           )}
           <div className="space-y-1.5">

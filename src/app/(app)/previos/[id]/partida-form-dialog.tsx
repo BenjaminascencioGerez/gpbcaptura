@@ -26,12 +26,14 @@ const FIELDS: { name: keyof Partida; label: string; span?: 1 | 2 }[] = [
   { name: "numserie", label: "NumSerie" },
   { name: "pais_origen", label: "País de Origen" },
   { name: "peso", label: "Peso" },
+  { name: "kilos_por_pieza", label: "Kilos por pieza" },
+  { name: "umt", label: "UMT (unidad de tasación)" },
   { name: "precio_unitario", label: "Precio Unitario" },
   { name: "total", label: "Total" },
   { name: "id_cat_no_art_no", label: "ID / CAT. NO. / ART. NO." },
 ];
 
-const NUMERIC_FIELDS = new Set(["no_partida", "cant_factura", "peso", "precio_unitario", "total"]);
+const NUMERIC_FIELDS = new Set(["no_partida", "cant_factura", "peso", "kilos_por_pieza", "precio_unitario", "total"]);
 
 export function PartidaFormDialog({
   previoId,
