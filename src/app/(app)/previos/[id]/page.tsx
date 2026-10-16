@@ -22,6 +22,9 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
   const supabase = await createClient();
   const role = await getCurrentRole();
   const readOnly = isReadOnly(role);
+  const {
+    data: { user: currentUser },
+  } = await supabase.auth.getUser();
 
   const { data: previo } = await supabase
     .from("previos")
@@ -61,6 +64,11 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
         .returns<ClasificacionArancelaria[]>()
     : { data: [] as ClasificacionArancelaria[] };
 
+  const sumaPesoPartidas = rows.reduce((acc, p) => acc + (p.peso ?? 0), 0);
+  const pesoBruto = previo.peso_bruto ?? 0;
+  const pesoDeltaPct = pesoBruto > 0 ? Math.abs(pesoBruto - sumaPesoPartidas) / pesoBruto : 0;
+  const showPesoWarning = rows.length > 0 && pesoBruto > 0 && pesoDeltaPct > 0.1;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -88,6 +96,13 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
           <PrevioHeaderForm previo={previo} readOnly={readOnly} />
         </CardContent>
       </Card>
+
+      {showPesoWarning && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          El peso bruto ({pesoBruto} kg) difiere {Math.round(pesoDeltaPct * 100)}% de la suma de pesos de
+          las partidas ({sumaPesoPartidas.toFixed(2)} kg). Verifica antes de enviar a facturación.
+        </div>
+      )}
 
       <Card>
         <CardHeader className="flex-row items-center justify-between">
@@ -120,11 +135,22 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
             <TableBody>
               {rows.map((p) => {
                 const attachments = attachmentsByPartida.get(p.id) ?? [];
+                const expectedTotal =
+                  p.cant_factura != null && p.precio_unitario != null
+                    ? p.cant_factura * p.precio_unitario
+                    : null;
+                const totalMismatch =
+                  expectedTotal != null && p.total != null && Math.abs(expectedTotal - p.total) > 0.01;
                 return (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.no_partida}</TableCell>
                     <TableCell className="max-w-xs truncate" title={p.descripcion_aa ?? ""}>
                       {p.descripcion_aa ?? "—"}
+                      {totalMismatch && (
+                        <div className="text-xs text-destructive mt-0.5">
+                          ⚠ cant. × precio ({expectedTotal?.toFixed(2)}) ≠ total ({p.total})
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>{p.fraccion_arancelaria ?? "—"}</TableCell>
                     <TableCell>
@@ -172,7 +198,9 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
                             }
                           />
                         )}
-                        {canGlosar(role) && p.classification_status === "clasificado" && (
+                        {canGlosar(role) &&
+                          p.classification_status === "clasificado" &&
+                          p.clasificado_by !== currentUser?.id && (
                           <GlosarPartidaDialog
                             previoId={previo.id}
                             partida={p}

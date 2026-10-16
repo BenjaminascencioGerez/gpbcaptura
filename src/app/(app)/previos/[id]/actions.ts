@@ -144,8 +144,14 @@ export async function classifyPartida(
 
   const fraccion = String(formData.get("fraccion_arancelaria") ?? "").trim();
   if (!fraccion) return { error: "La fracción arancelaria es obligatoria." };
+  if (!/^\d{8}$/.test(fraccion)) {
+    return { error: "La fracción arancelaria debe tener exactamente 8 dígitos (TIGIE), sin puntos ni guiones." };
+  }
 
   const nico = String(formData.get("nico") ?? "").trim() || null;
+  if (nico && !/^\d{2}$/.test(nico)) {
+    return { error: "El NICO debe tener exactamente 2 dígitos." };
+  }
   const regulaciones = String(formData.get("aplica_ma") ?? "").trim() || null;
   const saveToCatalog = formData.get("save_to_catalog") === "on";
 
@@ -205,6 +211,33 @@ export async function glosarPartida(
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  const { data: partidaActual } = await supabase
+    .from("partidas")
+    .select("aplica_ma, clasificado_by, classification_status")
+    .eq("id", partidaId)
+    .single();
+
+  if (partidaActual?.classification_status !== "clasificado") {
+    return { error: "Esta partida todavía no está clasificada." };
+  }
+
+  if (user && partidaActual.clasificado_by === user.id) {
+    return { error: "Quien clasifica no puede glosar la misma partida (separación de funciones)." };
+  }
+
+  if (partidaActual.aplica_ma) {
+    const { count } = await supabase
+      .from("partida_attachments")
+      .select("id", { count: "exact", head: true })
+      .eq("partida_id", partidaId)
+      .eq("file_type", "document");
+    if (!count) {
+      return {
+        error: `Esta partida requiere "${partidaActual.aplica_ma}" — adjunta el documento/evidencia antes de glosar.`,
+      };
+    }
+  }
 
   const notas = String(formData.get("notas_glosa") ?? "").trim() || null;
 
@@ -298,6 +331,18 @@ export async function sendToFacturacion(previoId: string) {
 
   if (error || !previo) return { error: error?.message ?? "Previo no encontrado." };
   if (!previo.peso_bruto) return { error: "Captura el peso bruto antes de enviar a facturación." };
+
+  const { count: pendientes } = await supabase
+    .from("partidas")
+    .select("id", { count: "exact", head: true })
+    .eq("previo_id", previoId)
+    .eq("classification_status", "pendiente");
+
+  if (pendientes && pendientes > 0) {
+    return {
+      error: `Hay ${pendientes} partida(s) sin clasificar — clasifícalas antes de enviar a facturación.`,
+    };
+  }
 
   const apiUrl = process.env.GPBFACTURACION_API_URL;
   const apiKey = process.env.GPBFACTURACION_API_KEY;

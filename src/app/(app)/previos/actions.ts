@@ -34,7 +34,10 @@ export async function createPrevioManual(_prevState: { error: string } | null, f
     .select("id")
     .single();
 
-  if (error || !data) return { error: error?.message ?? "No se pudo crear el previo." };
+  if (error || !data) {
+    if (error?.code === "23505") return { error: `Ya existe un previo con la referencia "${reference}".` };
+    return { error: error?.message ?? "No se pudo crear el previo." };
+  }
 
   redirect(`/previos/${data.id}`);
 }
@@ -80,6 +83,9 @@ export async function importPrevioExcel(_prevState: { error: string } | null, fo
     .single();
 
   if (previoError || !previo) {
+    if (previoError?.code === "23505") {
+      return { error: `Ya existe un previo con la referencia "${header.reference}".` };
+    }
     return { error: previoError?.message ?? "No se pudo crear el previo." };
   }
 
