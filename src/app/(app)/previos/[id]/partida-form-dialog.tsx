@@ -28,7 +28,6 @@ const FIELDS: { name: keyof Partida; label: string; span?: 1 | 2 }[] = [
   { name: "pais_origen", label: "País de Origen" },
   { name: "peso", label: "Peso" },
   { name: "kilos_por_pieza", label: "Kilos por pieza" },
-  { name: "umt", label: "UMT (unidad de tasación)" },
   { name: "precio_unitario", label: "Precio Unitario" },
   { name: "total", label: "Total" },
   { name: "id_cat_no_art_no", label: "ID / CAT. NO. / ART. NO." },

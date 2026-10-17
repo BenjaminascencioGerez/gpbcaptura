@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { classifyPartida } from "./actions";
+import { classifyPartida, lookupLigieUmt } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,7 +35,24 @@ export function ClassifyPartidaDialog({
   const [fraccion, setFraccion] = useState(partida.fraccion_arancelaria ?? "");
   const [nico, setNico] = useState(partida.nico ?? "");
   const [regulaciones, setRegulaciones] = useState(partida.aplica_ma ?? "");
+  const [umt, setUmt] = useState(partida.umt ?? "");
+  const [umtHint, setUmtHint] = useState("");
   const [refPhoto, setRefPhoto] = useState<string | null>(null);
+
+  async function handleFraccionBlur() {
+    if (!/^\d{8}$/.test(fraccion)) return;
+    const result = await lookupLigieUmt(fraccion, nico || null);
+    if (result.umt) {
+      setUmtHint(
+        result.requiereNom
+          ? `LIGIE sugiere "${result.umt}" — esta fracción suele requerir NOM.`
+          : `LIGIE sugiere "${result.umt}" para esta fracción.`
+      );
+      if (!umt) setUmt(result.umt);
+    } else {
+      setUmtHint("No se encontró esta fracción/NICO en el catálogo oficial LIGIE — captúralo a mano.");
+    }
+  }
 
   const action = classifyPartida.bind(null, previoId, partida.id);
   const [state, formAction, pending] = useActionState(action, null);
@@ -80,6 +97,12 @@ export function ClassifyPartidaDialog({
                   setNico(c.nico ?? "");
                   setRegulaciones(c.regulaciones ?? "");
                   setRefPhoto(c.photo_url);
+                  lookupLigieUmt(c.fraccion_arancelaria, c.nico ?? null).then((result) => {
+                    if (result.umt) {
+                      setUmt(result.umt);
+                      setUmtHint(`LIGIE sugiere "${result.umt}" para esta fracción.`);
+                    }
+                  });
                 }}
               >
                 <SelectTrigger className="w-full">
@@ -112,11 +135,23 @@ export function ClassifyPartidaDialog({
               required
               value={fraccion}
               onChange={(e) => setFraccion(e.target.value)}
+              onBlur={handleFraccionBlur}
             />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="nico">NICO</Label>
-            <Input id="nico" name="nico" value={nico} onChange={(e) => setNico(e.target.value)} />
+            <Input
+              id="nico"
+              name="nico"
+              value={nico}
+              onChange={(e) => setNico(e.target.value)}
+              onBlur={handleFraccionBlur}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="umt">UMT (unidad de tasación)</Label>
+            <Input id="umt" name="umt" value={umt} onChange={(e) => setUmt(e.target.value)} />
+            {umtHint && <p className="text-xs text-muted-foreground">{umtHint}</p>}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="aplica_ma">Regulaciones / NOM (si aplica)</Label>

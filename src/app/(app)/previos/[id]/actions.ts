@@ -166,6 +166,21 @@ export async function updatePrevioHeader(previoId: string, formData: FormData) {
   revalidatePath(`/previos/${previoId}`);
 }
 
+export async function lookupLigieUmt(fraccion: string, nico: string | null) {
+  if (!/^\d{8}$/.test(fraccion)) return { umt: null, requiereNom: false };
+
+  const supabase = await createClient();
+  let query = supabase
+    .from("fracciones_ligie")
+    .select("umt, requiere_nom")
+    .eq("fraccion_arancelaria", fraccion);
+
+  if (nico) query = query.eq("nico", nico);
+
+  const { data } = await query.limit(1).maybeSingle();
+  return { umt: data?.umt ?? null, requiereNom: data?.requiere_nom ?? false };
+}
+
 export async function classifyPartida(
   previoId: string,
   partidaId: string,
@@ -191,6 +206,7 @@ export async function classifyPartida(
     return { error: "El NICO debe tener exactamente 2 dígitos." };
   }
   const regulaciones = String(formData.get("aplica_ma") ?? "").trim() || null;
+  const umt = String(formData.get("umt") ?? "").trim() || null;
   const saveToCatalog = formData.get("save_to_catalog") === "on";
 
   const { data: previo } = await supabase.from("previos").select("reference, cliente").eq("id", previoId).single();
@@ -201,6 +217,7 @@ export async function classifyPartida(
       fraccion_arancelaria: fraccion,
       nico,
       aplica_ma: regulaciones,
+      umt,
       classification_status: "clasificado",
       clasificado_by: user?.id ?? null,
       clasificado_at: new Date().toISOString(),
