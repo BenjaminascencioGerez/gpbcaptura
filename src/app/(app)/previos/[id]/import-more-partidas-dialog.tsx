@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { importMorePartidas } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +27,10 @@ export function ImportMorePartidasDialog({
   const [state, formAction, pending] = useActionState(action, null);
 
   useEffect(() => {
-    if (state && !state.error) setOpen(false);
+    if (state && !state.error) {
+      if (state.message) toast.success(state.message);
+      setOpen(false);
+    }
   }, [state]);
 
   return (

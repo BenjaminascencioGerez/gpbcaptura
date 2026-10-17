@@ -1,4 +1,20 @@
 import ExcelJS from "exceljs";
+import { UM_COMERCIAL_OPTIONS } from "@/lib/um-comercial";
+
+// El catálogo SAT de Unidad de Medida Comercial numera estas 21 unidades
+// 1–21 en este mismo orden; el Excel de previo normalmente trae el número
+// en la columna F en vez del texto.
+function normalizeUmComercial(raw: string | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  const asNumber = Number(trimmed);
+  if (Number.isInteger(asNumber) && asNumber >= 1 && asNumber <= UM_COMERCIAL_OPTIONS.length) {
+    return UM_COMERCIAL_OPTIONS[asNumber - 1];
+  }
+  const upper = trimmed.toUpperCase();
+  const match = UM_COMERCIAL_OPTIONS.find((u) => u === upper);
+  return match ?? raw;
+}
 
 export type ParsedPrevioHeader = {
   reference: string;
@@ -106,7 +122,7 @@ export async function parsePrevioExcel(
       fraccion_arancelaria: cellText(sheet.getCell(`C${row}`)),
       nico: cellText(sheet.getCell(`D${row}`)),
       cant_factura: cellNumber(sheet.getCell(`E${row}`)),
-      um_comercial: cellText(sheet.getCell(`F${row}`)),
+      um_comercial: normalizeUmComercial(cellText(sheet.getCell(`F${row}`))),
       descripcion_aa: cellText(sheet.getCell(`G${row}`)),
       marca: cellText(sheet.getCell(`H${row}`)),
       modelo: cellText(sheet.getCell(`I${row}`)),

@@ -94,19 +94,37 @@ export async function importMorePartidas(previoId: string, _prevState: { error: 
   }
 
   const supabase = await createClient();
-  const { count } = await supabase
+  const { data: existing, count } = await supabase
     .from("partidas")
-    .select("id", { count: "exact", head: true })
+    .select("no_partida", { count: "exact" })
     .eq("previo_id", previoId);
+
+  const existingNumbers = new Set((existing ?? []).map((p) => p.no_partida));
+  const newRows = parsed.partidas.filter((p) => !existingNumbers.has(p.no_partida));
+  const skipped = parsed.partidas.length - newRows.length;
+
+  if (newRows.length === 0) {
+    return {
+      error: `Las ${parsed.partidas.length} partidas del archivo ya existen en este previo (mismo No. de Partida) — no se agregó nada.`,
+    };
+  }
 
   const startOrder = count ?? 0;
   const { error } = await supabase.from("partidas").insert(
-    parsed.partidas.map((p, i) => ({ ...p, previo_id: previoId, sort_order: startOrder + i }))
+    newRows.map((p, i) => ({ ...p, previo_id: previoId, sort_order: startOrder + i }))
   );
 
   if (error) return { error: error.message };
   revalidatePath(`/previos/${previoId}`);
-  return { error: "", added: parsed.partidas.length };
+  return {
+    error: "",
+    added: newRows.length,
+    skipped,
+    message:
+      skipped > 0
+        ? `Se agregaron ${newRows.length} partidas nuevas; se omitieron ${skipped} que ya existían (mismo No. de Partida).`
+        : `Se agregaron ${newRows.length} partidas nuevas.`,
+  };
 }
 
 export async function updatePartida(
