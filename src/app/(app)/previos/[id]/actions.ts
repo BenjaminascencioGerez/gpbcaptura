@@ -6,6 +6,7 @@ import { canClassify, canGlosar, isReadOnly } from "@/lib/roles";
 import { getCurrentRole } from "@/lib/roles-server";
 import { notifyEjecutivos } from "@/lib/notify";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { parsePrevioExcel } from "@/lib/previo-excel";
 
 type PartidaInput = {
   previo_id: string;
@@ -73,6 +74,39 @@ export async function addPartida(previoId: string, _prevState: { error: string }
   if (error) return { error: error.message };
   revalidatePath(`/previos/${previoId}`);
   return { error: "" };
+}
+
+export async function importMorePartidas(previoId: string, _prevState: { error: string } | null, formData: FormData) {
+  const role = await getCurrentRole();
+  if (isReadOnly(role)) return { error: "Tu rol (Ejecutivo) solo tiene acceso de lectura." };
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Selecciona un archivo .xlsx." };
+  }
+
+  let parsed;
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    parsed = await parsePrevioExcel(buffer);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "No se pudo leer el archivo." };
+  }
+
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("partidas")
+    .select("id", { count: "exact", head: true })
+    .eq("previo_id", previoId);
+
+  const startOrder = count ?? 0;
+  const { error } = await supabase.from("partidas").insert(
+    parsed.partidas.map((p, i) => ({ ...p, previo_id: previoId, sort_order: startOrder + i }))
+  );
+
+  if (error) return { error: error.message };
+  revalidatePath(`/previos/${previoId}`);
+  return { error: "", added: parsed.partidas.length };
 }
 
 export async function updatePartida(

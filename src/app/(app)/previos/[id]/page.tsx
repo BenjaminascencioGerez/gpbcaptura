@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { PaperclipIcon, PlusIcon } from "lucide-react";
+import { PaperclipIcon, PlusIcon, UploadIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { DeletePartidaButton } from "./delete-partida-button";
 import { SendToFacturacionButton } from "./send-to-facturacion-button";
 import { ClassifyPartidaDialog } from "./classify-partida-dialog";
 import { GlosarPartidaDialog } from "./glosar-partida-dialog";
+import { ImportMorePartidasDialog } from "./import-more-partidas-dialog";
 
 export default async function PrevioDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -241,6 +242,27 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
               )}
             </TableBody>
           </Table>
+          {!readOnly && (
+            <div className="flex items-center gap-2 border-t p-3">
+              <PartidaFormDialog
+                previoId={previo.id}
+                nextNoPartida={rows.length + 1}
+                trigger={
+                  <Button size="sm" variant="outline">
+                    <PlusIcon className="size-4" /> Nueva partida
+                  </Button>
+                }
+              />
+              <ImportMorePartidasDialog
+                previoId={previo.id}
+                trigger={
+                  <Button size="sm" variant="outline">
+                    <UploadIcon className="size-4" /> Cargar más partidas desde Excel
+                  </Button>
+                }
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
