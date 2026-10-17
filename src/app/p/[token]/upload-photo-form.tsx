@@ -1,15 +1,59 @@
 "use client";
 
-import { useActionState, useRef } from "react";
-import { uploadPartidaPhoto } from "./actions";
+import { useRef, useState } from "react";
+import { requestPublicUploadSlot, confirmPublicUpload } from "./actions";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 
 export function UploadPhotoForm({ token, hasPhoto }: { token: string; hasPhoto: boolean }) {
-  const action = uploadPartidaPhoto.bind(null, token);
-  const [state, formAction, pending] = useActionState(action, null);
-  const formRef = useRef<HTMLFormElement>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  if (state?.success) {
+  async function handleUpload() {
+    const files = Array.from(inputRef.current?.files ?? []);
+    if (files.length === 0) {
+      setError("Selecciona o toma al menos una foto.");
+      return;
+    }
+
+    setPending(true);
+    setError("");
+    const supabase = createClient();
+
+    for (const file of files) {
+      const slot = await requestPublicUploadSlot(token, file.name);
+      if (slot.error || !slot.path || !slot.token) {
+        setError(slot.error || "No se pudo preparar la subida.");
+        setPending(false);
+        return;
+      }
+
+      const { error: uploadError } = await supabase.storage
+        .from("partida-photos")
+        .uploadToSignedUrl(slot.path, slot.token, file);
+
+      if (uploadError) {
+        setError(`No se pudo subir "${file.name}": ${uploadError.message}`);
+        setPending(false);
+        return;
+      }
+
+      const fileType = file.type.startsWith("image/") ? "photo" : "document";
+      const confirm = await confirmPublicUpload(token, slot.path, fileType);
+      if (confirm.error) {
+        setError(confirm.error);
+        setPending(false);
+        return;
+      }
+    }
+
+    setPending(false);
+    setSuccess(true);
+  }
+
+  if (success) {
     return (
       <p className="text-sm font-medium text-center text-primary">
         Subido correctamente. Ya puedes cerrar esta página.
@@ -18,10 +62,10 @@ export function UploadPhotoForm({ token, hasPhoto }: { token: string; hasPhoto: 
   }
 
   return (
-    <form ref={formRef} action={formAction} className="space-y-3">
+    <div className="space-y-3">
       <input
+        ref={inputRef}
         type="file"
-        name="file"
         accept="image/*,application/pdf"
         multiple
         required
@@ -30,10 +74,10 @@ export function UploadPhotoForm({ token, hasPhoto }: { token: string; hasPhoto: 
       <p className="text-xs text-muted-foreground">
         Puedes tomar una foto con la cámara o elegir varias fotos/documentos a la vez.
       </p>
-      {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
-      <Button type="submit" className="w-full" disabled={pending}>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <Button type="button" className="w-full" disabled={pending} onClick={handleUpload}>
         {pending ? "Subiendo..." : hasPhoto ? "Agregar más" : "Subir"}
       </Button>
-    </form>
+    </div>
   );
 }

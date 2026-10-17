@@ -275,50 +275,49 @@ export async function glosarPartida(
   return { error: "" };
 }
 
-export async function addOfficeAttachment(
+// La foto sube directo del navegador a Supabase Storage (bypass de Vercel,
+// que limita el body de una Server Action a 4.5MB) — este action solo crea
+// la URL firmada de subida.
+export async function requestOfficeUploadSlot(previoId: string, partidaId: string, fileName: string) {
+  const role = await getCurrentRole();
+  if (isReadOnly(role)) return { error: "Tu rol (Ejecutivo) solo tiene acceso de lectura." } as const;
+
+  const admin = createAdminClient();
+  const ext = fileName.split(".").pop() || "jpg";
+  const path = `${previoId}/${partidaId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+
+  const { data, error } = await admin.storage.from("partida-photos").createSignedUploadUrl(path);
+  if (error || !data) return { error: `No se pudo preparar la subida: ${error?.message}` } as const;
+
+  return { error: "", path, token: data.token } as const;
+}
+
+export async function confirmOfficeUpload(
   previoId: string,
   partidaId: string,
-  _prevState: { error: string } | null,
-  formData: FormData
+  path: string,
+  fileType: "photo" | "document"
 ) {
   const role = await getCurrentRole();
   if (isReadOnly(role)) return { error: "Tu rol (Ejecutivo) solo tiene acceso de lectura." };
 
-  const files = formData.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
-  if (files.length === 0) return { error: "Selecciona al menos un archivo." };
-
   const admin = createAdminClient();
-  let coverUrl: string | null = null;
+  const { data: publicUrl } = admin.storage.from("partida-photos").getPublicUrl(path);
 
-  for (const file of files) {
-    const ext = file.name.split(".").pop() || "jpg";
-    const path = `${previoId}/${partidaId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
-    const isPhoto = file.type.startsWith("image/");
+  const { error: insertError } = await admin.from("partida_attachments").insert({
+    partida_id: partidaId,
+    file_url: publicUrl.publicUrl,
+    file_type: fileType,
+    uploaded_via: "office",
+  });
+  if (insertError) return { error: insertError.message };
 
-    const { error: uploadError } = await admin.storage
-      .from("partida-photos")
-      .upload(path, await file.arrayBuffer(), {
-        contentType: file.type || "application/octet-stream",
-        upsert: false,
-      });
-    if (uploadError) return { error: `No se pudo subir "${file.name}": ${uploadError.message}` };
-
-    const { data: publicUrl } = admin.storage.from("partida-photos").getPublicUrl(path);
-    await admin.from("partida_attachments").insert({
-      partida_id: partidaId,
-      file_url: publicUrl.publicUrl,
-      file_type: isPhoto ? "photo" : "document",
-      uploaded_via: "office",
-    });
-    if (isPhoto && !coverUrl) coverUrl = publicUrl.publicUrl;
-  }
-
-  if (coverUrl) {
+  if (fileType === "photo") {
     const { data: partida } = await admin.from("partidas").select("photo_url").eq("id", partidaId).single();
     if (!partida?.photo_url) {
       await admin
         .from("partidas")
-        .update({ photo_url: coverUrl, photo_uploaded_at: new Date().toISOString() })
+        .update({ photo_url: publicUrl.publicUrl, photo_uploaded_at: new Date().toISOString() })
         .eq("id", partidaId);
     }
   }
