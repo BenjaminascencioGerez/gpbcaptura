@@ -191,6 +191,7 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
                             previoId={previo.id}
                             partida={p}
                             catalogo={catalogo ?? []}
+                            attachments={attachments}
                             trigger={
                               <Button variant="ghost" size="sm">
                                 Clasificar
@@ -204,6 +205,7 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
                           <GlosarPartidaDialog
                             previoId={previo.id}
                             partida={p}
+                            attachments={attachments}
                             trigger={
                               <Button variant="ghost" size="sm">
                                 Glosar
