@@ -25,7 +25,8 @@ export type ParsedPrevioHeader = {
 };
 
 export type ParsedPartidaRow = {
-  no_partida: number;
+  no_partida: number | null;
+  sin_factura: boolean;
   fraccion_arancelaria: string | null;
   nico: string | null;
   cant_factura: number | null;
@@ -90,28 +91,36 @@ function parsePesoBruto(text: string | null): number | null {
   return Number(m[1].replace(",", "."));
 }
 
-export async function parsePrevioExcel(
-  buffer: Buffer
-): Promise<{ header: ParsedPrevioHeader; partidas: ParsedPartidaRow[] }> {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
-  const sheet = workbook.worksheets[0];
-  if (!sheet) throw new Error("El archivo no tiene hojas.");
+// Busca la fila de encabezado ("No. Partida" en columna B) en cualquiera de
+// las primeras 20 filas, en vez de asumir que siempre es la fila 13 — así
+// sirve tanto para el template oficial como para hojas armadas a mano.
+function findHeaderRow(sheet: ExcelJS.Worksheet): number | null {
+  for (let row = 1; row <= 20; row++) {
+    const text = cellText(sheet.getCell(`B${row}`));
+    if (text && /no\.?\s*partida/i.test(text)) return row;
+  }
+  return null;
+}
 
-  const header: ParsedPrevioHeader = {
-    reference: cellText(sheet.getCell("D11")) ?? "",
-    cliente: cellText(sheet.getCell("H11")) ?? "",
-    fecha: parseFechaDDMMYYYY(cellText(sheet.getCell("O11"))),
-    bultos_tarimas: cellNumber(sheet.getCell("B7")),
-    peso_bruto: parsePesoBruto(cellText(sheet.getCell("N9"))),
-  };
+function parseSheetPartidas(sheet: ExcelJS.Worksheet, startSortOrder: number): ParsedPartidaRow[] {
+  const headerRow = findHeaderRow(sheet);
+  if (headerRow === null) return [];
 
   const partidas: ParsedPartidaRow[] = [];
-  let row = 14;
-  let sortOrder = 0;
-  while (true) {
+  let row = headerRow + 1;
+  let sortOrder = startSortOrder;
+  let consecutiveBlank = 0;
+
+  while (row < headerRow + 2000 && consecutiveBlank < 2) {
     const noPartida = cellNumber(sheet.getCell(`B${row}`));
-    if (noPartida === null) break;
+    const descripcion = cellText(sheet.getCell(`G${row}`));
+
+    if (noPartida === null && !descripcion) {
+      consecutiveBlank++;
+      row++;
+      continue;
+    }
+    consecutiveBlank = 0;
 
     const r = cellText(sheet.getCell(`R${row}`));
     const s = cellText(sheet.getCell(`S${row}`));
@@ -119,11 +128,12 @@ export async function parsePrevioExcel(
 
     partidas.push({
       no_partida: noPartida,
+      sin_factura: noPartida === null,
       fraccion_arancelaria: cellText(sheet.getCell(`C${row}`)),
       nico: cellText(sheet.getCell(`D${row}`)),
       cant_factura: cellNumber(sheet.getCell(`E${row}`)),
       um_comercial: normalizeUmComercial(cellText(sheet.getCell(`F${row}`))),
-      descripcion_aa: cellText(sheet.getCell(`G${row}`)),
+      descripcion_aa: descripcion,
       marca: cellText(sheet.getCell(`H${row}`)),
       modelo: cellText(sheet.getCell(`I${row}`)),
       submodelo: cellText(sheet.getCell(`J${row}`)),
@@ -140,9 +150,52 @@ export async function parsePrevioExcel(
     row++;
   }
 
-  if (partidas.length === 0) {
-    throw new Error("No se encontraron partidas a partir de la fila 14. Verifica el formato del archivo.");
+  return partidas;
+}
+
+export async function parsePrevioExcel(
+  buffer: Buffer
+): Promise<{ header: ParsedPrevioHeader; partidas: ParsedPartidaRow[] }> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+  if (workbook.worksheets.length === 0) throw new Error("El archivo no tiene hojas.");
+
+  let header: ParsedPrevioHeader | null = null;
+  const numbered: ParsedPartidaRow[] = [];
+  const sinFactura: ParsedPartidaRow[] = [];
+
+  for (const sheet of workbook.worksheets) {
+    if (!header) {
+      const reference = cellText(sheet.getCell("D11"));
+      if (reference) {
+        header = {
+          reference,
+          cliente: cellText(sheet.getCell("H11")) ?? "",
+          fecha: parseFechaDDMMYYYY(cellText(sheet.getCell("O11"))),
+          bultos_tarimas: cellNumber(sheet.getCell("B7")),
+          peso_bruto: parsePesoBruto(cellText(sheet.getCell("N9"))),
+        };
+      }
+    }
+
+    const rows = parseSheetPartidas(sheet, numbered.length + sinFactura.length);
+    for (const row of rows) {
+      if (row.sin_factura) sinFactura.push(row);
+      else numbered.push(row);
+    }
   }
+
+  if (!header) {
+    throw new Error('No se encontró el No. de Referencia (celda D11, junto al encabezado "No. de Referencia:").');
+  }
+
+  if (numbered.length === 0 && sinFactura.length === 0) {
+    throw new Error('No se encontraron partidas — verifica que alguna hoja tenga el encabezado "No. Partida".');
+  }
+
+  // Las que no tienen No. de Partida (sin cobertura de factura) van siempre
+  // al final, en el mismo orden en que se encontraron.
+  const partidas = [...numbered, ...sinFactura].map((p, i) => ({ ...p, sort_order: i }));
 
   return { header, partidas };
 }

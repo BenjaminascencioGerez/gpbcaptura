@@ -39,6 +39,7 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
     .from("partidas")
     .select("*")
     .eq("previo_id", id)
+    .order("sin_factura", { ascending: true })
     .order("sort_order", { ascending: true })
     .returns<Partida[]>();
 
@@ -65,6 +66,7 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
         .returns<ClasificacionArancelaria[]>()
     : { data: [] as ClasificacionArancelaria[] };
 
+  const sinFacturaCount = rows.filter((p) => p.sin_factura).length;
   const sumaPesoPartidas = rows.reduce((acc, p) => acc + (p.peso ?? 0), 0);
   const pesoBruto = previo.peso_bruto ?? 0;
   const pesoDeltaPct = pesoBruto > 0 ? Math.abs(pesoBruto - sumaPesoPartidas) / pesoBruto : 0;
@@ -102,6 +104,13 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           El peso bruto ({pesoBruto} kg) difiere {Math.round(pesoDeltaPct * 100)}% de la suma de pesos de
           las partidas ({sumaPesoPartidas.toFixed(2)} kg). Verifica antes de enviar a facturación.
+        </div>
+      )}
+
+      {sinFacturaCount > 0 && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          ⚠ {sinFacturaCount} partida(s) sin No. de Partida — no vienen físicamente en la factura actual y
+          necesitan una factura nueva antes de poder enviarse. Están al final de la tabla.
         </div>
       )}
 
@@ -143,10 +152,23 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
                 const totalMismatch =
                   expectedTotal != null && p.total != null && Math.abs(expectedTotal - p.total) > 0.01;
                 return (
-                  <TableRow key={p.id}>
-                    <TableCell className="font-medium">{p.no_partida}</TableCell>
+                  <TableRow key={p.id} className={p.sin_factura ? "bg-destructive/5" : undefined}>
+                    <TableCell className="font-medium">
+                      {p.sin_factura ? (
+                        <Badge variant="destructive" className="whitespace-nowrap">
+                          Sin factura
+                        </Badge>
+                      ) : (
+                        p.no_partida
+                      )}
+                    </TableCell>
                     <TableCell className="max-w-xs truncate" title={p.descripcion_aa ?? ""}>
                       {p.descripcion_aa ?? "—"}
+                      {p.sin_factura && (
+                        <div className="text-xs text-destructive mt-0.5">
+                          Requiere agregarse a una factura nueva
+                        </div>
+                      )}
                       {totalMismatch && (
                         <div className="text-xs text-destructive mt-0.5">
                           ⚠ cant. × precio ({expectedTotal?.toFixed(2)}) ≠ total ({p.total})

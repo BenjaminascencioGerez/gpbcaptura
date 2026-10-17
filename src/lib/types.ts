@@ -17,7 +17,8 @@ export type Previo = {
 export type Partida = {
   id: string;
   previo_id: string;
-  no_partida: number;
+  no_partida: number | null;
+  sin_factura: boolean;
   fraccion_arancelaria: string | null;
   nico: string | null;
   cant_factura: number | null;

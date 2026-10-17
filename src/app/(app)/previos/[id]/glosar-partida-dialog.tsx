@@ -41,7 +41,7 @@ export function GlosarPartidaDialog({
       <DialogTrigger render={trigger as React.ReactElement} />
       <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Glosar partida {partida.no_partida}</DialogTitle>
+          <DialogTitle>Glosar partida {partida.no_partida ?? "(sin factura)"}</DialogTitle>
         </DialogHeader>
 
         <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">

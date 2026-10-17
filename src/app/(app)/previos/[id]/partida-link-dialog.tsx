@@ -28,7 +28,7 @@ export function PartidaLinkDialog({
   previoId: string;
   partidaId: string;
   token: string;
-  noPartida: number;
+  noPartida: number | null;
   attachments: PartidaAttachment[];
   readOnly: boolean;
   trigger: React.ReactNode;
@@ -89,7 +89,7 @@ export function PartidaLinkDialog({
       <DialogTrigger render={trigger as React.ReactElement} />
       <DialogContent className="sm:max-w-sm max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Adjuntos — partida {noPartida}</DialogTitle>
+          <DialogTitle>Adjuntos — partida {noPartida ?? "(sin factura)"}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col items-center gap-3">
           {qr && (

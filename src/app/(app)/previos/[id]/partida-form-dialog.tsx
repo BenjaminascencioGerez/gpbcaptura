@@ -93,7 +93,9 @@ export function PartidaFormDialog({
                   step={NUMERIC_FIELDS.has(f.name) ? "any" : undefined}
                   defaultValue={
                     f.name === "no_partida"
-                      ? String(partida?.no_partida ?? nextNoPartida ?? 1)
+                      ? partida
+                        ? (partida.no_partida ?? "")
+                        : String(nextNoPartida ?? 1)
                       : (partida?.[f.name] as string | number | null | undefined) ?? ""
                   }
                 />

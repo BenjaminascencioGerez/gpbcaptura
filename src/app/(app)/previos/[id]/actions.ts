@@ -10,7 +10,8 @@ import { parsePrevioExcel } from "@/lib/previo-excel";
 
 type PartidaInput = {
   previo_id: string;
-  no_partida: number;
+  no_partida: number | null;
+  sin_factura: boolean;
   cant_factura: number | null;
   um_comercial: string | null;
   descripcion_aa: string | null;
@@ -28,7 +29,12 @@ type PartidaInput = {
   umt: string | null;
 };
 
-function fromFormData(previoId: string, formData: FormData, sortOrder: number): PartidaInput {
+function fromFormData(
+  previoId: string,
+  formData: FormData,
+  sortOrder: number,
+  fallbackToNextNumber: boolean
+): PartidaInput {
   const str = (k: string) => String(formData.get(k) ?? "").trim() || null;
   const num = (k: string) => {
     const v = formData.get(k);
@@ -36,9 +42,11 @@ function fromFormData(previoId: string, formData: FormData, sortOrder: number): 
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   };
+  const noPartida = num("no_partida") ?? (fallbackToNextNumber ? sortOrder + 1 : null);
   return {
     previo_id: previoId,
-    no_partida: Number(formData.get("no_partida")) || sortOrder + 1,
+    no_partida: noPartida,
+    sin_factura: noPartida === null,
     cant_factura: num("cant_factura"),
     um_comercial: str("um_comercial"),
     descripcion_aa: str("descripcion_aa"),
@@ -69,7 +77,7 @@ export async function addPartida(previoId: string, _prevState: { error: string }
 
   const { error } = await supabase
     .from("partidas")
-    .insert({ ...fromFormData(previoId, formData, count ?? 0), sort_order: count ?? 0 });
+    .insert({ ...fromFormData(previoId, formData, count ?? 0, true), sort_order: count ?? 0 });
 
   if (error) return { error: error.message };
   revalidatePath(`/previos/${previoId}`);
@@ -99,8 +107,10 @@ export async function importMorePartidas(previoId: string, _prevState: { error: 
     .select("no_partida", { count: "exact" })
     .eq("previo_id", previoId);
 
-  const existingNumbers = new Set((existing ?? []).map((p) => p.no_partida));
-  const newRows = parsed.partidas.filter((p) => !existingNumbers.has(p.no_partida));
+  const existingNumbers = new Set((existing ?? []).map((p) => p.no_partida).filter((n): n is number => n !== null));
+  // Las partidas sin número (sin_factura) nunca se consideran duplicadas —
+  // no hay forma confiable de comparar sin un No. de Partida.
+  const newRows = parsed.partidas.filter((p) => p.no_partida === null || !existingNumbers.has(p.no_partida));
   const skipped = parsed.partidas.length - newRows.length;
 
   if (newRows.length === 0) {
@@ -139,7 +149,7 @@ export async function updatePartida(
   const supabase = await createClient();
   const { error } = await supabase
     .from("partidas")
-    .update(fromFormData(previoId, formData, 0))
+    .update(fromFormData(previoId, formData, 0, false))
     .eq("id", partidaId);
 
   if (error) return { error: error.message };
