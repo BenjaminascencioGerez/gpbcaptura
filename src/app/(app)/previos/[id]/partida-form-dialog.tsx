@@ -16,6 +16,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { UM_COMERCIAL_OPTIONS } from "@/lib/um-comercial";
+import { PAISES } from "@/lib/paises";
 import type { Partida } from "@/lib/types";
 
 const FIELDS: { name: keyof Partida; label: string; span?: 1 | 2 }[] = [
@@ -25,7 +26,6 @@ const FIELDS: { name: keyof Partida; label: string; span?: 1 | 2 }[] = [
   { name: "modelo", label: "Modelo" },
   { name: "submodelo", label: "SubModelo" },
   { name: "numserie", label: "NumSerie" },
-  { name: "pais_origen", label: "País de Origen" },
   { name: "peso", label: "Peso" },
   { name: "kilos_por_pieza", label: "Kilos por pieza" },
   { name: "precio_unitario", label: "Precio Unitario" },
@@ -48,11 +48,13 @@ export function PartidaFormDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [umComercial, setUmComercial] = useState(partida?.um_comercial ?? "");
+  const [paisOrigen, setPaisOrigen] = useState(partida?.pais_origen ?? "");
   const action = partida
     ? updatePartida.bind(null, previoId, partida.id)
     : addPartida.bind(null, previoId);
   const [state, formAction, pending] = useActionState(action, null);
   const umComercialItems = Object.fromEntries(UM_COMERCIAL_OPTIONS.map((u) => [u, u]));
+  const paisItems = Object.fromEntries(PAISES.map((p) => [p.clave, `${p.clave} — ${p.nombre}`]));
 
   useEffect(() => {
     if (state && !state.error) setOpen(false);
@@ -78,6 +80,22 @@ export function PartidaFormDialog({
                   {UM_COMERCIAL_OPTIONS.map((u) => (
                     <SelectItem key={u} value={u}>
                       {u}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="pais_origen">País de Origen</Label>
+              <input type="hidden" name="pais_origen" value={paisOrigen} />
+              <Select items={paisItems} value={paisOrigen} onValueChange={(v) => v && setPaisOrigen(v)}>
+                <SelectTrigger id="pais_origen" className="w-full">
+                  <SelectValue placeholder="Seleccionar..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAISES.map((p) => (
+                    <SelectItem key={p.clave} value={p.clave}>
+                      {p.clave} — {p.nombre}
                     </SelectItem>
                   ))}
                 </SelectContent>
