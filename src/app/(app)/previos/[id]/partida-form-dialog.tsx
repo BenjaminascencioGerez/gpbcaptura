@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -14,12 +15,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { UM_COMERCIAL_OPTIONS } from "@/lib/um-comercial";
 import type { Partida } from "@/lib/types";
 
 const FIELDS: { name: keyof Partida; label: string; span?: 1 | 2 }[] = [
   { name: "no_partida", label: "No. Partida" },
   { name: "cant_factura", label: "Cant. Factura" },
-  { name: "um_comercial", label: "UM Comercial" },
   { name: "marca", label: "Marca" },
   { name: "modelo", label: "Modelo" },
   { name: "submodelo", label: "SubModelo" },
@@ -47,10 +48,12 @@ export function PartidaFormDialog({
   trigger: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [umComercial, setUmComercial] = useState(partida?.um_comercial ?? "");
   const action = partida
     ? updatePartida.bind(null, previoId, partida.id)
     : addPartida.bind(null, previoId);
   const [state, formAction, pending] = useActionState(action, null);
+  const umComercialItems = Object.fromEntries(UM_COMERCIAL_OPTIONS.map((u) => [u, u]));
 
   useEffect(() => {
     if (state && !state.error) setOpen(false);
@@ -65,6 +68,22 @@ export function PartidaFormDialog({
         </DialogHeader>
         <form action={formAction} className="space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="um_comercial">UM Comercial</Label>
+              <input type="hidden" name="um_comercial" value={umComercial} />
+              <Select items={umComercialItems} value={umComercial} onValueChange={(v) => v && setUmComercial(v)}>
+                <SelectTrigger id="um_comercial" className="w-full">
+                  <SelectValue placeholder="Seleccionar..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {UM_COMERCIAL_OPTIONS.map((u) => (
+                    <SelectItem key={u} value={u}>
+                      {u}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {FIELDS.map((f) => (
               <div key={f.name} className="space-y-1.5">
                 <Label htmlFor={f.name}>{f.label}</Label>
