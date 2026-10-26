@@ -19,6 +19,14 @@ export type Previo = {
   bultos_inventario: string | null;
   estado: "en_bodega" | "importado";
   importado_at: string | null;
+  clasificador_id: string | null;
+  clasificador_nombre: string | null;
+  enviado_clasificacion_at: string | null;
+  enviado_clasificacion_by: string | null;
+  glosador_id: string | null;
+  glosador_nombre: string | null;
+  enviado_glosa_at: string | null;
+  enviado_glosa_by: string | null;
   created_by: string | null;
   created_at: string;
 };

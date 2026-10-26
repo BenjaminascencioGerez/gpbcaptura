@@ -218,6 +218,7 @@ export default async function DashboardPage({
                 <TableHead>GBI / TOIM / TPIM</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Revisor</TableHead>
+                <TableHead>Asignado a</TableHead>
                 <TableHead>Fecha de arribo</TableHead>
                 <TableHead>Días en bodega</TableHead>
                 <TableHead>Avance</TableHead>
@@ -235,6 +236,13 @@ export default async function DashboardPage({
                   <TableCell>{p.referencia_cliente ?? "—"}</TableCell>
                   <TableCell>{cliente}</TableCell>
                   <TableCell className={revisor === SIN_REVISOR ? "text-muted-foreground" : undefined}>{revisor}</TableCell>
+                  <TableCell>
+                    {prog.etapa === "glosa"
+                      ? (p.glosador_nombre ?? "—")
+                      : prog.etapa === "clasificacion"
+                        ? (p.clasificador_nombre ?? "—")
+                        : "—"}
+                  </TableCell>
                   <TableCell>{p.fecha_arribo ?? "—"}</TableCell>
                   <TableCell>
                     {dias === null ? (
@@ -258,7 +266,7 @@ export default async function DashboardPage({
               ))}
               {filtradas.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                     {hayFiltros ? "Ningún previo pendiente con esos filtros." : "No hay previos pendientes."}
                   </TableCell>
                 </TableRow>

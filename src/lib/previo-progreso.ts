@@ -19,7 +19,7 @@ type PartidaProgreso = Pick<Partida, "id" | "photo_url" | "classification_status
 // Una partida cuenta como capturada por el revisor cuando ya tiene al menos
 // una foto o documento (link público o subida en oficina).
 export function calcularProgreso(
-  previo: Pick<Previo, "status">,
+  previo: Pick<Previo, "status" | "enviado_clasificacion_at" | "enviado_glosa_at">,
   partidas: PartidaProgreso[],
   partidasConAdjunto: Set<string>
 ): { avance: number; capturadas: number; total: number; etapa: Etapa } {
@@ -27,8 +27,12 @@ export function calcularProgreso(
   const capturadas = partidas.filter((p) => p.photo_url || partidasConAdjunto.has(p.id)).length;
   const avance = total > 0 ? Math.round((capturadas / total) * 100) : 0;
 
+  // Si el previo se envió a clasificación o a glosa, esa es su etapa; si no
+  // (previos anteriores a la asignación), se deduce de sus partidas.
   let etapa: Etapa;
   if (previo.status === "sent") etapa = "enviado_facturacion";
+  else if (previo.enviado_glosa_at) etapa = "glosa";
+  else if (previo.enviado_clasificacion_at) etapa = "clasificacion";
   else if (total === 0 || capturadas < total) etapa = "revision_fisica";
   else if (partidas.some((p) => p.classification_status === "pendiente")) etapa = "clasificacion";
   else etapa = "glosa";
