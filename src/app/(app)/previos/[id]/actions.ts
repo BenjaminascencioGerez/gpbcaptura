@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { canClassify, canGlosar, isReadOnly } from "@/lib/roles";
+import { canClassify, canDocumentar, canGlosar, isReadOnly, isSuperAdmin } from "@/lib/roles";
 import { getCurrentRole } from "@/lib/roles-server";
 import { notifyEjecutivos, notifyUsuarios } from "@/lib/notify";
 import { listarUsuariosConRol } from "@/lib/usuarios-server";
@@ -304,7 +304,7 @@ export async function classifyPartida(
   return { error: "" };
 }
 
-// Quien confirma las fracciones (rol Glosador) revisa cada partida:
+// Quien confirma las fracciones (otro Clasificador) revisa cada partida:
 // - "confirmar": la aprueba; puede corregir la fracción/NICO antes de confirmar.
 // - "solicitar_info": pide documentos, datasheet o fotos más específicas.
 // - "regresar": la devuelve al clasificador para que la vuelva a clasificar.
@@ -316,7 +316,7 @@ export async function revisarFraccion(
   formData: FormData
 ) {
   const role = await getCurrentRole();
-  if (!canGlosar(role)) return { error: "No tienes permiso para confirmar fracciones." };
+  if (!canClassify(role)) return { error: "No tienes permiso para confirmar fracciones (rol Clasificador)." };
 
   const accion = String(formData.get("accion") ?? "");
   const supabase = await createClient();
@@ -371,7 +371,7 @@ export async function revisarFraccion(
 
     // Al regresar una partida, el previo vuelve a Clasificación con el mismo clasificador.
     if (accion === "regresar") {
-      await supabase.from("previos").update({ enviado_glosa_at: null }).eq("id", previoId);
+      await supabase.from("previos").update({ enviado_glosa_at: null, etapa_manual: null }).eq("id", previoId);
     }
 
     const destinatario = previo?.clasificador_id ?? partidaActual.clasificado_by;
@@ -463,15 +463,20 @@ export async function enviarADocumentacion(previoId: string) {
     .from("partidas")
     .select("glosado, revision_estado")
     .eq("previo_id", previoId);
-  if (!partidas || partidas.length === 0) return { error: "El previo no tiene partidas." };
-  const sinConfirmar = partidas.filter((p) => !p.glosado || p.revision_estado).length;
-  if (sinConfirmar > 0) {
+  const forzar = isSuperAdmin(role);
+  if (!forzar && (!partidas || partidas.length === 0)) return { error: "El previo no tiene partidas." };
+  const sinConfirmar = (partidas ?? []).filter((p) => !p.glosado || p.revision_estado).length;
+  if (!forzar && sinConfirmar > 0) {
     return { error: `Hay ${sinConfirmar} partida(s) con la fracción sin confirmar.` };
   }
 
   const { data: previo, error } = await supabase
     .from("previos")
-    .update({ enviado_documentacion_at: new Date().toISOString(), enviado_documentacion_by: user?.id ?? null })
+    .update({
+      enviado_documentacion_at: new Date().toISOString(),
+      enviado_documentacion_by: user?.id ?? null,
+      etapa_manual: null,
+    })
     .eq("id", previoId)
     .select("reference")
     .single();
@@ -561,7 +566,7 @@ export async function sendToFacturacion(previoId: string) {
     .eq("previo_id", previoId)
     .eq("classification_status", "pendiente");
 
-  if (pendientes && pendientes > 0) {
+  if (pendientes && pendientes > 0 && !isSuperAdmin(role)) {
     return {
       error: `Hay ${pendientes} partida(s) sin clasificar — clasifícalas antes de enviar a facturación.`,
     };
@@ -625,7 +630,7 @@ export async function enviarAClasificacion(previoId: string, clasificadorId: str
     .from("partidas")
     .select("id", { count: "exact", head: true })
     .eq("previo_id", previoId);
-  if (!partidas) return { error: "El previo no tiene partidas para clasificar." };
+  if (!partidas && !isSuperAdmin(role)) return { error: "El previo no tiene partidas para clasificar." };
 
   const { data: previo, error } = await supabase
     .from("previos")
@@ -634,6 +639,7 @@ export async function enviarAClasificacion(previoId: string, clasificadorId: str
       clasificador_nombre: clasificador.nombre,
       enviado_clasificacion_at: new Date().toISOString(),
       enviado_clasificacion_by: user?.id ?? null,
+      etapa_manual: null,
     })
     .eq("id", previoId)
     .select("reference")
@@ -660,10 +666,10 @@ export async function enviarAGlosa(previoId: string, glosadorId: string) {
   const role = await getCurrentRole();
   if (isReadOnly(role)) return { error: "Tu rol (Ejecutivo) solo tiene acceso de lectura." };
 
-  const glosador = (await listarUsuariosConRol(["glosador", "administrador", "super_admin"])).find(
+  const glosador = (await listarUsuariosConRol(["clasificador", "administrador", "super_admin"])).find(
     (u) => u.id === glosadorId
   );
-  if (!glosador) return { error: "Selecciona quién va a confirmar las fracciones (rol Glosador)." };
+  if (!glosador) return { error: "Selecciona quién va a confirmar las fracciones (rol Clasificador)." };
 
   const supabase = await createClient();
   const {
@@ -675,7 +681,7 @@ export async function enviarAGlosa(previoId: string, glosadorId: string) {
     .select("id", { count: "exact", head: true })
     .eq("previo_id", previoId)
     .eq("classification_status", "pendiente");
-  if (pendientes && pendientes > 0) {
+  if (pendientes && pendientes > 0 && !isSuperAdmin(role)) {
     return { error: `Hay ${pendientes} partida(s) sin clasificar — clasifícalas antes de enviar las fracciones.` };
   }
 
@@ -686,6 +692,7 @@ export async function enviarAGlosa(previoId: string, glosadorId: string) {
       glosador_nombre: glosador.nombre,
       enviado_glosa_at: new Date().toISOString(),
       enviado_glosa_by: user?.id ?? null,
+      etapa_manual: null,
     })
     .eq("id", previoId)
     .select("reference")
@@ -699,6 +706,125 @@ export async function enviarAGlosa(previoId: string, glosadorId: string) {
 
   revalidatePath(`/previos/${previoId}`);
   revalidatePath("/previos");
+  revalidatePath("/dashboard");
+  return { error: "" };
+}
+
+// Super Admin: mueve el previo a cualquier etapa (adelantar o regresar) sin
+// validar que esté completo. Las fechas de envío se ajustan para que las
+// etapas siguientes queden sin enviar y las anteriores como enviadas.
+export async function cambiarEtapa(
+  previoId: string,
+  etapa: "revision_fisica" | "clasificacion" | "glosa" | "documentacion" | "glosa_final"
+) {
+  const role = await getCurrentRole();
+  if (!isSuperAdmin(role)) return { error: "Solo el Super Admin puede cambiar la etapa manualmente." };
+
+  const supabase = await createClient();
+  const { data: previo } = await supabase
+    .from("previos")
+    .select("status, enviado_clasificacion_at, enviado_glosa_at, enviado_documentacion_at, enviado_glosa_final_at")
+    .eq("id", previoId)
+    .single();
+  if (!previo) return { error: "Previo no encontrado." };
+  if (previo.status === "sent") return { error: "El previo ya se envió a facturación." };
+
+  const orden = ["revision_fisica", "clasificacion", "glosa", "documentacion", "glosa_final"] as const;
+  const nivel = orden.indexOf(etapa);
+  const ahora = new Date().toISOString();
+  const fecha = (actual: string | null, paso: number) => (nivel >= paso ? (actual ?? ahora) : null);
+
+  const { error } = await supabase
+    .from("previos")
+    .update({
+      etapa_manual: etapa,
+      enviado_clasificacion_at: fecha(previo.enviado_clasificacion_at, 1),
+      enviado_glosa_at: fecha(previo.enviado_glosa_at, 2),
+      enviado_documentacion_at: fecha(previo.enviado_documentacion_at, 3),
+      enviado_glosa_final_at: fecha(previo.enviado_glosa_final_at, 4),
+      glosado_final_at: null,
+    })
+    .eq("id", previoId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/previos/${previoId}`);
+  revalidatePath("/previos");
+  revalidatePath("/dashboard");
+  return { error: "" };
+}
+
+// Documentación terminada: un Ejecutivo envía el previo al Glosador para la
+// glosa del pedimento.
+export async function enviarAGlosaFinal(previoId: string, glosadorId: string) {
+  const role = await getCurrentRole();
+  if (!canDocumentar(role)) return { error: "Solo Ejecutivos o Administradores envían a glosa." };
+
+  const glosador = (await listarUsuariosConRol(["glosador", "administrador", "super_admin"])).find(
+    (u) => u.id === glosadorId
+  );
+  if (!glosador) return { error: "Selecciona un usuario con rol de Glosador." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: actual } = await supabase.from("previos").select("enviado_documentacion_at").eq("id", previoId).single();
+  if (!actual?.enviado_documentacion_at && !isSuperAdmin(role)) {
+    return { error: "El previo todavía no está en documentación." };
+  }
+
+  const { data: previo, error } = await supabase
+    .from("previos")
+    .update({
+      glosa_final_id: glosador.id,
+      glosa_final_nombre: glosador.nombre,
+      enviado_glosa_final_at: new Date().toISOString(),
+      enviado_glosa_final_by: user?.id ?? null,
+      glosado_final_at: null,
+      etapa_manual: null,
+    })
+    .eq("id", previoId)
+    .select("reference")
+    .single();
+  if (error || !previo) return { error: error?.message ?? "Previo no encontrado." };
+
+  await notifyUsuarios(
+    { eventType: "previo_enviado_glosa_final", previoId, payload: { reference: previo.reference, glosador: glosador.nombre } },
+    [glosador.id]
+  );
+
+  revalidatePath(`/previos/${previoId}`);
+  revalidatePath("/dashboard");
+  return { error: "" };
+}
+
+// El Glosador termina la glosa del pedimento; queda listo para facturación.
+export async function marcarGlosado(previoId: string) {
+  const role = await getCurrentRole();
+  if (!canGlosar(role)) return { error: "Solo el Glosador puede marcar el previo como glosado." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: actual } = await supabase.from("previos").select("enviado_glosa_final_at").eq("id", previoId).single();
+  if (!actual?.enviado_glosa_final_at && !isSuperAdmin(role)) {
+    return { error: "El previo todavía no se ha enviado a glosa." };
+  }
+
+  const { data: previo, error } = await supabase
+    .from("previos")
+    .update({ glosado_final_at: new Date().toISOString(), glosado_final_by: user?.id ?? null, etapa_manual: null })
+    .eq("id", previoId)
+    .select("reference")
+    .single();
+  if (error || !previo) return { error: error?.message ?? "Previo no encontrado." };
+
+  await notifyEjecutivos({ eventType: "previo_glosado", previoId, payload: { reference: previo.reference } });
+
+  revalidatePath(`/previos/${previoId}`);
   revalidatePath("/dashboard");
   return { error: "" };
 }

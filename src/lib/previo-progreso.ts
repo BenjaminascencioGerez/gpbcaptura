@@ -1,6 +1,13 @@
 import type { Partida, Previo } from "./types";
 
-export type Etapa = "revision_fisica" | "clasificacion" | "glosa" | "documentacion" | "enviado_facturacion";
+export type Etapa =
+  | "revision_fisica"
+  | "clasificacion"
+  | "glosa"
+  | "documentacion"
+  | "glosa_final"
+  | "glosado"
+  | "enviado_facturacion";
 
 // "glosa" se muestra como Confirmación de fracciones.
 export const ETAPA_LABELS: Record<Etapa, string> = {
@@ -8,6 +15,8 @@ export const ETAPA_LABELS: Record<Etapa, string> = {
   clasificacion: "Clasificación",
   glosa: "Confirmación de fracciones",
   documentacion: "Documentación",
+  glosa_final: "Glosa",
+  glosado: "Glosado (listo para facturar)",
   enviado_facturacion: "Enviado a facturación",
 };
 
@@ -21,7 +30,16 @@ type PartidaProgreso = Pick<Partida, "id" | "photo_url" | "classification_status
 // Una partida cuenta como capturada por el revisor cuando ya tiene al menos
 // una foto o documento (link público o subida en oficina).
 export function calcularProgreso(
-  previo: Pick<Previo, "status" | "enviado_clasificacion_at" | "enviado_glosa_at" | "enviado_documentacion_at">,
+  previo: Pick<
+    Previo,
+    | "status"
+    | "enviado_clasificacion_at"
+    | "enviado_glosa_at"
+    | "enviado_documentacion_at"
+    | "enviado_glosa_final_at"
+    | "glosado_final_at"
+    | "etapa_manual"
+  >,
   partidas: PartidaProgreso[],
   partidasConAdjunto: Set<string>
 ): {
@@ -40,6 +58,9 @@ export function calcularProgreso(
   // (previos anteriores a la asignación), se deduce de sus partidas.
   let etapa: Etapa;
   if (previo.status === "sent") etapa = "enviado_facturacion";
+  else if (previo.etapa_manual) etapa = previo.etapa_manual;
+  else if (previo.glosado_final_at) etapa = "glosado";
+  else if (previo.enviado_glosa_final_at) etapa = "glosa_final";
   else if (previo.enviado_documentacion_at) etapa = "documentacion";
   else if (previo.enviado_glosa_at) etapa = "glosa";
   else if (previo.enviado_clasificacion_at) etapa = "clasificacion";

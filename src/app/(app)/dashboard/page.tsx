@@ -12,12 +12,14 @@ import { cargarProgreso } from "@/lib/previo-progreso-server";
 // A partir de cuántos días en bodega un previo se marca como atorado.
 const DIAS_ATORADO = 7;
 
-const ETAPAS_PENDIENTES: Etapa[] = ["revision_fisica", "clasificacion", "glosa", "documentacion"];
+const ETAPAS_PENDIENTES: Etapa[] = ["revision_fisica", "clasificacion", "glosa", "documentacion", "glosa_final", "glosado"];
 const ETAPA_COLOR: Record<Etapa, string> = {
   revision_fisica: "bg-amber-500",
   clasificacion: "bg-sky-500",
   glosa: "bg-violet-500",
   documentacion: "bg-teal-500",
+  glosa_final: "bg-rose-500",
+  glosado: "bg-lime-500",
   enviado_facturacion: "bg-emerald-500",
 };
 
@@ -70,7 +72,9 @@ export default async function DashboardPage({
           ? p.clasificador_nombre?.trim() || SIN_ASIGNAR
           : prog.etapa === "glosa"
             ? p.glosador_nombre?.trim() || SIN_ASIGNAR
-            : null;
+            : prog.etapa === "glosa_final"
+              ? p.glosa_final_nombre?.trim() || SIN_ASIGNAR
+              : null;
       return {
         previo: p,
         prog,
@@ -89,22 +93,31 @@ export default async function DashboardPage({
     porEtapa(e) === 0 ? "Ninguno" : sinAsignar(e) > 0 ? `${sinAsignar(e)} sin asignar` : "Todos asignados";
 
   // Carga de cada clasificador / glosador (previos que tiene pendientes).
-  const personas = new Map<string, { clasificar: number; glosar: number }>();
+  const personas = new Map<string, { clasificar: number; confirmar: number; glosar: number }>();
   for (const f of filas) {
     if (!f.asignado) continue;
-    const c = personas.get(f.asignado) ?? { clasificar: 0, glosar: 0 };
+    const c = personas.get(f.asignado) ?? { clasificar: 0, confirmar: 0, glosar: 0 };
     if (f.prog.etapa === "clasificacion") c.clasificar += 1;
+    else if (f.prog.etapa === "glosa") c.confirmar += 1;
     else c.glosar += 1;
     personas.set(f.asignado, c);
   }
   const porPersona = [...personas.entries()]
     .map(([nombre, c]) => ({ nombre, ...c }))
-    .sort((a, b) => (a.nombre === SIN_ASIGNAR ? -1 : b.nombre === SIN_ASIGNAR ? 1 : b.clasificar + b.glosar - (a.clasificar + a.glosar)));
+    .sort((a, b) => (a.nombre === SIN_ASIGNAR ? -1 : b.nombre === SIN_ASIGNAR ? 1 : b.clasificar + b.confirmar + b.glosar - (a.clasificar + a.confirmar + a.glosar)));
 
   // Pendientes por cliente, desglosados por etapa.
   const clientes = new Map<string, Record<Etapa, number>>();
   for (const f of filas) {
-    const c = clientes.get(f.cliente) ?? { revision_fisica: 0, clasificacion: 0, glosa: 0, documentacion: 0, enviado_facturacion: 0 };
+    const c = clientes.get(f.cliente) ?? {
+      revision_fisica: 0,
+      clasificacion: 0,
+      glosa: 0,
+      documentacion: 0,
+      glosa_final: 0,
+      glosado: 0,
+      enviado_facturacion: 0,
+    };
     c[f.prog.etapa] += 1;
     clientes.set(f.cliente, c);
   }
@@ -155,8 +168,21 @@ export default async function DashboardPage({
         <Kpi
           titulo="En documentación"
           valor={porEtapa("documentacion")}
-          detalle="Listos para capturar pedimento"
+          detalle="Ejecutivos capturan el pedimento"
           href="/dashboard?etapa=documentacion"
+        />
+        <Kpi
+          titulo="Pendientes de glosa"
+          valor={porEtapa("glosa_final")}
+          detalle={detalleAsignacion("glosa_final")}
+          href="/dashboard?etapa=glosa_final"
+          alerta={sinAsignar("glosa_final") > 0}
+        />
+        <Kpi
+          titulo="Listos para facturar"
+          valor={porEtapa("glosado")}
+          detalle="Glosados"
+          href="/dashboard?etapa=glosado"
         />
         <Kpi titulo="Pendientes de importar" valor={filas.length} detalle="Todos los que siguen en bodega" href="/previos" />
         <Kpi titulo="Importados este mes" valor={importadosMes ?? 0} detalle="Pasaron al historial" href="/historial" />
@@ -171,7 +197,7 @@ export default async function DashboardPage({
       {porPersona.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Pendientes por clasificador y por quien confirma</CardTitle>
+            <CardTitle className="text-base">Pendientes por persona</CardTitle>
           </CardHeader>
           <CardContent className="p-0 overflow-x-auto">
             <Table>
@@ -180,6 +206,7 @@ export default async function DashboardPage({
                   <TableHead>Persona</TableHead>
                   <TableHead className="text-right">Por clasificar</TableHead>
                   <TableHead className="text-right">Por confirmar</TableHead>
+                  <TableHead className="text-right">Por glosar</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -194,6 +221,7 @@ export default async function DashboardPage({
                       </Link>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{p.clasificar || "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{p.confirmar || "—"}</TableCell>
                     <TableCell className="text-right tabular-nums">{p.glosar || "—"}</TableCell>
                   </TableRow>
                 ))}
