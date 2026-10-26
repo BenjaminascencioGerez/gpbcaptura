@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { parsePrevioExcel } from "@/lib/previo-excel";
@@ -22,6 +23,7 @@ export async function createPrevioManual(_prevState: { error: string } | null, f
     .from("previos")
     .insert({
       reference,
+      referencia_cliente: String(formData.get("referencia_cliente") ?? "").trim() || null,
       cliente: String(formData.get("cliente") ?? "").trim() || null,
       fecha: String(formData.get("fecha") ?? "") || new Date().toISOString().slice(0, 10),
       bultos_tarimas: numOrNull(formData.get("bultos_tarimas")),
@@ -98,6 +100,23 @@ export async function importPrevioExcel(_prevState: { error: string } | null, fo
   }
 
   redirect(`/previos/${previo.id}`);
+}
+
+export async function setPrevioEstado(previoId: string, estado: "en_bodega" | "importado") {
+  const role = await getCurrentRole();
+  if (isReadOnly(role)) return { error: "Tu rol (Ejecutivo) solo tiene acceso de lectura." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("previos")
+    .update({ estado, importado_at: estado === "importado" ? new Date().toISOString() : null })
+    .eq("id", previoId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/previos");
+  revalidatePath("/historial");
+  revalidatePath(`/previos/${previoId}`);
+  return { error: "" };
 }
 
 function numOrNull(v: FormDataEntryValue | null): number | null {

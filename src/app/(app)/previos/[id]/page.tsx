@@ -17,6 +17,8 @@ import { SendToFacturacionButton } from "./send-to-facturacion-button";
 import { ClassifyPartidaDialog } from "./classify-partida-dialog";
 import { GlosarPartidaDialog } from "./glosar-partida-dialog";
 import { ImportMorePartidasDialog } from "./import-more-partidas-dialog";
+import { EstadoButton } from "../estado-button";
+import { ESTADO_LABELS } from "@/lib/previo-progreso";
 
 export default async function PrevioDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -76,18 +78,27 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <Link href="/previos" className="text-sm text-muted-foreground hover:underline">
-            ← Previos
+          <Link
+            href={previo.estado === "importado" ? "/historial" : "/previos"}
+            className="text-sm text-muted-foreground hover:underline"
+          >
+            ← {previo.estado === "importado" ? "Historial de previos" : "Previos"}
           </Link>
           <h1 className="text-2xl font-semibold flex items-center gap-2">
             {previo.reference}
             <Badge variant={previo.status === "sent" ? "default" : "secondary"}>
               {previo.status === "sent" ? "Enviado" : "Borrador"}
             </Badge>
+            <Badge variant={previo.estado === "importado" ? "default" : "outline"}>
+              {ESTADO_LABELS[previo.estado]}
+            </Badge>
           </h1>
         </div>
         {!readOnly && (
-          <SendToFacturacionButton previoId={previo.id} disabled={previo.status === "sent"} />
+          <div className="flex items-center gap-2">
+            <EstadoButton previoId={previo.id} estado={previo.estado} reference={previo.reference} />
+            <SendToFacturacionButton previoId={previo.id} disabled={previo.status === "sent"} />
+          </div>
         )}
       </div>
 

@@ -22,12 +22,47 @@ export function PrevioHeaderForm({ previo, readOnly }: { previo: Previo; readOnl
       className="grid grid-cols-2 sm:grid-cols-4 gap-4"
     >
       <div className="space-y-1.5">
-        <Label htmlFor="reference">No. de Referencia (GBI)</Label>
+        <Label htmlFor="reference">Referencia GER/GW</Label>
         <Input id="reference" name="reference" defaultValue={previo.reference} required disabled={readOnly} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="referencia_cliente">GBI / TOIM / TPIM</Label>
+        <Input
+          id="referencia_cliente"
+          name="referencia_cliente"
+          defaultValue={previo.referencia_cliente ?? ""}
+          disabled={readOnly}
+        />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="cliente">Cliente</Label>
         <Input id="cliente" name="cliente" defaultValue={previo.cliente ?? ""} disabled={readOnly} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="proveedor">Proveedor</Label>
+        <Input id="proveedor" name="proveedor" defaultValue={previo.proveedor ?? ""} disabled={readOnly} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="fecha_arribo">Fecha de arribo</Label>
+        <Input id="fecha_arribo" name="fecha_arribo" type="date" defaultValue={previo.fecha_arribo ?? ""} disabled={readOnly} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="fecha_revision">Fecha de revisión</Label>
+        <Input
+          id="fecha_revision"
+          name="fecha_revision"
+          type="date"
+          defaultValue={previo.fecha_revision ?? ""}
+          disabled={readOnly}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="revisor">Revisor</Label>
+        <Input id="revisor" name="revisor" defaultValue={previo.revisor ?? ""} disabled={readOnly} />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="recibido_por">Recibido por</Label>
+        <Input id="recibido_por" name="recibido_por" defaultValue={previo.recibido_por ?? ""} disabled={readOnly} />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="fecha">Fecha</Label>

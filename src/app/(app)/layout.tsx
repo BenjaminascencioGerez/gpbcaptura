@@ -26,6 +26,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Link href="/previos" className="text-muted-foreground hover:text-foreground">
                 Previos
               </Link>
+              <Link href="/historial" className="text-muted-foreground hover:text-foreground">
+                Historial de previos
+              </Link>
               <Link href="/catalogo" className="text-muted-foreground hover:text-foreground">
                 Catálogo
               </Link>
