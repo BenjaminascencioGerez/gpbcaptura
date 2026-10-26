@@ -1,16 +1,19 @@
 -- Cruce del inventario físico en bodega (INVENTARIO.xlsx, 26/10/2026) contra previos.
 -- Requiere haber corrido antes supabase/inventario_historial.sql.
+-- Se corre en el SQL Editor de Supabase en DOS partes (cada una con su Run).
 --
--- Datos del Excel completados con Outlook (avisos de recepción y correos de revisión):
---   * GBI/TOIM/WSEM/ALSWIM/PRY: del asunto "AVISO DE RECEPCIÓN ... NO.: GERxxxx / <ref cliente>"
---   * Fecha de revisión / revisor: primer correo "REVISION ..." con la revisión adjunta.
+-- Datos del Excel completados con Outlook (avisos de recepción y correos de revisión).
 -- Correcciones al Excel: GW10535 -> GER10535 (BMD / GBI3515), GBI35577 -> GBI3577,
 -- fecha de arribo de GW0542 venía como 176.81 (era 22/10/2026 según el aviso).
---
--- Corre los pasos en orden. El paso 3 es solo vista previa; revísala antes del 4.
 
--- 1) Inventario en tabla temporal -------------------------------------------------
-create temp table inventario (
+-- ===================== PARTE 1: cargar, completar y vista previa =====================
+
+-- Referencia comparable: mayúsculas, sin espacios y sin sufijo de parcialidad (-1, -2).
+create or replace function ref_norm(t text) returns text
+  language sql immutable
+  as $$ select nullif(regexp_replace(upper(replace(coalesce(t, ''), ' ', '')), '-\d+$', ''), '') $$;
+
+create table inventario_fisico (
   referencia text primary key,
   referencia_cliente text,
   cliente text,
@@ -20,10 +23,14 @@ create temp table inventario (
   revisor text,
   recibido_por text,
   bultos text,
-  peso numeric(12,2)
+  peso numeric(12,2),
+  fecha_corte date not null default '2026-10-26'
 );
+alter table inventario_fisico enable row level security;
+create policy "authenticated full access" on inventario_fisico for all
+  using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
-insert into inventario values
+insert into inventario_fisico (referencia, referencia_cliente, cliente, proveedor, fecha_arribo, fecha_revision, revisor, recibido_por, bultos, peso) values
   ('GW0543',     'TOIM-0202I',   'CWL MEXICO S DE RL DE CV',         'TRANSOCEAN OFFSHORE DEEPWATER',      '2026-10-22', '2026-10-23', 'Saul Garcia',      'Alejandra Gonzalez', '3',      1572.15),
   ('GW0541',     'TOIM-0200I',   'CWL MEXICO S DE RL DE CV',         'TRANSOCEAN OFFSHORE DEEPWATER',      '2026-10-22', '2026-10-23', 'Saul Garcia',      'Alejandra Gonzalez', '1 DE 3', 2271),
   ('GW0542',     'TOIM-0201I',   'CWL MEXICO S DE RL DE CV',         'TRANSOCEAN OFFSHORE DEEPWATER',      '2026-10-22', null,         null,               'Alejandra Gonzalez', '2',      176.81),
@@ -53,49 +60,40 @@ insert into inventario values
   ('GER10605',   'GBI3618',      'MEXICO FLNG S DE RL DE CV',        null,                                 '2026-10-23', null,         null,               'Jorge Duarte',       '1',      null),
   ('GER10600',   'GBI3600',      'LOGISTICA Y SUMINISTROS TRITON',   null,                                 '2026-10-22', '2026-10-26', 'Saul Garcia',      'Mayra Treviño',      '5',      2066);
 
--- Normaliza: mayúsculas, sin espacios y sin sufijo de parcialidad (-1, -2).
-create or replace function pg_temp.ref_norm(t text) returns text
-  language sql immutable as $$ select nullif(regexp_replace(upper(replace(coalesce(t, ''), ' ', '')), '-\d+$', ''), '') $$;
-
--- Previo <-> renglón de inventario, por cualquiera de las dos referencias.
-create temp view cruce as
-select p.id as previo_id, i.*
-from previos p
-join inventario i
-  on pg_temp.ref_norm(i.referencia) in (pg_temp.ref_norm(p.reference), pg_temp.ref_norm(p.referencia_cliente))
-  or (i.referencia_cliente is not null
-      and pg_temp.ref_norm(i.referencia_cliente) in (pg_temp.ref_norm(p.reference), pg_temp.ref_norm(p.referencia_cliente)));
-
--- 2) Completa los previos que siguen en bodega (solo campos vacíos) --------------
+-- Completa los previos que siguen en bodega (solo campos vacíos).
 update previos p set
-  referencia_cliente = coalesce(p.referencia_cliente, c.referencia_cliente),
-  cliente            = coalesce(p.cliente, c.cliente),
-  proveedor          = coalesce(p.proveedor, c.proveedor),
-  fecha_arribo       = coalesce(p.fecha_arribo, c.fecha_arribo),
-  fecha_revision     = coalesce(p.fecha_revision, c.fecha_revision),
-  revisor            = coalesce(p.revisor, c.revisor),
-  recibido_por       = coalesce(p.recibido_por, c.recibido_por),
-  bultos_inventario  = coalesce(p.bultos_inventario, c.bultos),
-  peso_bruto         = coalesce(p.peso_bruto, c.peso)
-from cruce c
-where c.previo_id = p.id;
+  referencia_cliente = coalesce(p.referencia_cliente, i.referencia_cliente),
+  cliente            = coalesce(p.cliente, i.cliente),
+  proveedor          = coalesce(p.proveedor, i.proveedor),
+  fecha_arribo       = coalesce(p.fecha_arribo, i.fecha_arribo),
+  fecha_revision     = coalesce(p.fecha_revision, i.fecha_revision),
+  revisor            = coalesce(p.revisor, i.revisor),
+  recibido_por       = coalesce(p.recibido_por, i.recibido_por),
+  bultos_inventario  = coalesce(p.bultos_inventario, i.bultos),
+  peso_bruto         = coalesce(p.peso_bruto, i.peso)
+from inventario_fisico i
+where ref_norm(i.referencia) in (ref_norm(p.reference), ref_norm(p.referencia_cliente))
+   or ref_norm(i.referencia_cliente) in (ref_norm(p.reference), ref_norm(p.referencia_cliente));
 
--- Si está en inventario y no se ha enviado a facturación, se queda en Previos.
-update previos set estado = 'en_bodega', importado_at = null
-where status = 'draft' and estado = 'importado' and id in (select previo_id from cruce);
-
--- 3) VISTA PREVIA: previos en bodega que NO aparecen en el inventario ------------
--- OJO: el Excel no trae GER10606, GER10607, GER10608 ni GER10610 (sus revisiones
--- llegaron el 26/10); si existen como previo saldrán aquí aunque sigan en bodega.
+-- VISTA PREVIA: previos en bodega que NO aparecen en el inventario (irían al historial).
+-- El Excel no trae GER10606, GER10607, GER10608 ni GER10610 (revisados el 26/10): se excluyen.
 select p.reference, p.referencia_cliente, p.cliente, p.status, p.created_at
 from previos p
 where p.estado = 'en_bodega'
-  and p.id not in (select previo_id from cruce)
+  and upper(p.reference) not in ('GER10606', 'GER10607', 'GER10608', 'GER10610')
+  and not exists (
+    select 1 from inventario_fisico i
+    where ref_norm(i.referencia) in (ref_norm(p.reference), ref_norm(p.referencia_cliente))
+       or ref_norm(i.referencia_cliente) in (ref_norm(p.reference), ref_norm(p.referencia_cliente)))
 order by p.created_at;
 
--- 4) Mover a Historial de previos (correr después de revisar el paso 3) ----------
--- Agrega en el NOT IN las referencias de la vista previa que sí sigan en bodega.
-update previos set estado = 'importado', importado_at = now()
-where estado = 'en_bodega'
-  and id not in (select previo_id from cruce)
-  and upper(reference) not in ('GER10606', 'GER10607', 'GER10608', 'GER10610');
+-- ===================== PARTE 2: mover a Historial de previos =====================
+-- Correr después de revisar la vista previa. Agrega al NOT IN las referencias
+-- de la vista previa que sí sigan en bodega.
+update previos p set estado = 'importado', importado_at = now()
+where p.estado = 'en_bodega'
+  and upper(p.reference) not in ('GER10606', 'GER10607', 'GER10608', 'GER10610')
+  and not exists (
+    select 1 from inventario_fisico i
+    where ref_norm(i.referencia) in (ref_norm(p.reference), ref_norm(p.referencia_cliente))
+       or ref_norm(i.referencia_cliente) in (ref_norm(p.reference), ref_norm(p.referencia_cliente)));
