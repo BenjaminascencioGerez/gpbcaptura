@@ -22,6 +22,7 @@ import { AsignarDialog } from "./asignar-dialog";
 import { EnviarDocumentacionButton } from "./enviar-documentacion-button";
 import { CambiarEtapaControl } from "./cambiar-etapa-control";
 import { MarcarGlosadoButton } from "./marcar-glosado-button";
+import { SinDocumentosButton } from "./sin-documentos-button";
 import { calcularProgreso } from "@/lib/previo-progreso";
 import { DownloadIcon } from "lucide-react";
 import { listarUsuariosConRol } from "@/lib/usuarios-server";
@@ -134,7 +135,11 @@ export default async function PrevioDetailPage({
             <Badge variant={previo.estado === "importado" ? "default" : "outline"}>
               {ESTADO_LABELS[previo.estado]}
             </Badge>
+            {previo.sin_documentos && <Badge variant="destructive">Sin documentos</Badge>}
           </h1>
+          {previo.sin_documentos && previo.sin_documentos_nota && (
+            <p className="mt-1 text-sm text-destructive">Faltan: {previo.sin_documentos_nota}</p>
+          )}
           {(previo.enviado_clasificacion_at || previo.enviado_glosa_at || previo.enviado_documentacion_at) && (
             <p className="mt-1 text-sm text-muted-foreground">
               {previo.enviado_clasificacion_at && (
@@ -167,6 +172,9 @@ export default async function PrevioDetailPage({
         </div>
         {!readOnly && (
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {previo.status !== "sent" && (
+              <SinDocumentosButton previoId={previo.id} sinDocumentos={previo.sin_documentos} />
+            )}
             {superAdmin && previo.status !== "sent" && (
               <CambiarEtapaControl previoId={previo.id} etapaActual={etapaActual} />
             )}

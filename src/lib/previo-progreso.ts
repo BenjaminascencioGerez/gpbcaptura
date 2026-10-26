@@ -1,6 +1,7 @@
 import type { Partida, Previo } from "./types";
 
 export type Etapa =
+  | "sin_documentos"
   | "revision_fisica"
   | "clasificacion"
   | "glosa"
@@ -11,6 +12,7 @@ export type Etapa =
 
 // "glosa" se muestra como Confirmación de fracciones.
 export const ETAPA_LABELS: Record<Etapa, string> = {
+  sin_documentos: "Sin documentos",
   revision_fisica: "Revisión física",
   clasificacion: "Clasificación",
   glosa: "Confirmación de fracciones",
@@ -39,6 +41,7 @@ export function calcularProgreso(
     | "enviado_glosa_final_at"
     | "glosado_final_at"
     | "etapa_manual"
+    | "sin_documentos"
   >,
   partidas: PartidaProgreso[],
   partidasConAdjunto: Set<string>
@@ -58,6 +61,7 @@ export function calcularProgreso(
   // (previos anteriores a la asignación), se deduce de sus partidas.
   let etapa: Etapa;
   if (previo.status === "sent") etapa = "enviado_facturacion";
+  else if (previo.sin_documentos) etapa = "sin_documentos";
   else if (previo.etapa_manual) etapa = previo.etapa_manual;
   else if (previo.glosado_final_at) etapa = "glosado";
   else if (previo.enviado_glosa_final_at) etapa = "glosa_final";
