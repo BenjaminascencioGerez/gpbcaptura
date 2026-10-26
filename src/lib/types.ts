@@ -10,6 +10,15 @@ export type Previo = {
   peso_bruto: number | null;
   status: "draft" | "sent";
   sent_to_facturacion_at: string | null;
+  referencia_cliente: string | null;
+  proveedor: string | null;
+  fecha_arribo: string | null;
+  fecha_revision: string | null;
+  revisor: string | null;
+  recibido_por: string | null;
+  bultos_inventario: string | null;
+  estado: "en_bodega" | "importado";
+  importado_at: string | null;
   created_by: string | null;
   created_at: string;
 };

@@ -171,6 +171,7 @@ export async function updatePrevioHeader(previoId: string, formData: FormData) {
   if (isReadOnly(role)) return;
 
   const supabase = await createClient();
+  const str = (k: string) => String(formData.get(k) ?? "").trim() || null;
   const num = (k: string) => {
     const v = formData.get(k);
     if (v === null || v === "") return null;
@@ -181,13 +182,19 @@ export async function updatePrevioHeader(previoId: string, formData: FormData) {
     .from("previos")
     .update({
       reference: String(formData.get("reference") ?? "").trim(),
-      cliente: String(formData.get("cliente") ?? "").trim() || null,
+      referencia_cliente: str("referencia_cliente"),
+      cliente: str("cliente"),
+      proveedor: str("proveedor"),
       fecha: String(formData.get("fecha") ?? "") || undefined,
+      fecha_arribo: str("fecha_arribo"),
+      fecha_revision: str("fecha_revision"),
+      revisor: str("revisor"),
+      recibido_por: str("recibido_por"),
       peso_bruto: num("peso_bruto"),
       bultos_tarimas: num("bultos_tarimas"),
       bultos_cajas_madera: num("bultos_cajas_madera"),
       bultos_otros: num("bultos_otros"),
-      bultos_otros_tipo: String(formData.get("bultos_otros_tipo") ?? "").trim() || null,
+      bultos_otros_tipo: str("bultos_otros_tipo"),
     })
     .eq("id", previoId);
 
@@ -451,9 +458,11 @@ export async function sendToFacturacion(previoId: string) {
     return { error: e instanceof Error ? e.message : "No se pudo contactar a GPBFacturación." };
   }
 
+  // Al enviarse a facturación el previo se da por importado y pasa al historial.
+  const now = new Date().toISOString();
   await supabase
     .from("previos")
-    .update({ status: "sent", sent_to_facturacion_at: new Date().toISOString() })
+    .update({ status: "sent", sent_to_facturacion_at: now, estado: "importado", importado_at: now })
     .eq("id", previoId);
 
   await notifyEjecutivos({
@@ -463,5 +472,7 @@ export async function sendToFacturacion(previoId: string) {
   });
 
   revalidatePath(`/previos/${previoId}`);
+  revalidatePath("/previos");
+  revalidatePath("/historial");
   return { error: "" };
 }

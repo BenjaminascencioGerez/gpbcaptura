@@ -52,9 +52,15 @@ export default function NewPrevioPage() {
           <form action={manualAction} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="reference">No. de Referencia (GBI)</Label>
-                <Input id="reference" name="reference" required placeholder="GBI3543" />
+                <Label htmlFor="reference">Referencia GER/GW</Label>
+                <Input id="reference" name="reference" required placeholder="GER10606" />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="referencia_cliente">GBI / TOIM / TPIM</Label>
+                <Input id="referencia_cliente" name="referencia_cliente" placeholder="GBI3579" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="cliente">Cliente</Label>
                 <Input id="cliente" name="cliente" placeholder="NFE" />
