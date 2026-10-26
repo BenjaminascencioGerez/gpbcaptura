@@ -8,6 +8,8 @@ alter table partidas add column factura text;
 -- segunda factura. Se reemplaza por previo + factura + No. de partida; las
 -- partidas sin factura siguen sin poder repetir número (coalesce), y las sin
 -- No. de partida (sin_factura) pueden ser varias porque no_partida es null.
+-- Puede existir como constraint o como índice único según cómo se creó.
 alter table partidas drop constraint if exists partidas_previo_no_partida_unique;
+drop index if exists partidas_previo_no_partida_unique;
 create unique index if not exists partidas_previo_factura_no_partida_unique
   on partidas (previo_id, coalesce(factura, ''), no_partida);
