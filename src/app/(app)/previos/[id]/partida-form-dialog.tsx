@@ -18,6 +18,7 @@ import {
 import { UM_COMERCIAL_OPTIONS } from "@/lib/um-comercial";
 import { PAISES } from "@/lib/paises";
 import type { Partida } from "@/lib/types";
+import { etiquetaPartida } from "@/lib/partida";
 
 const FIELDS: { name: keyof Partida; label: string; span?: 1 | 2 }[] = [
   { name: "no_partida", label: "No. Partida" },
@@ -39,11 +40,13 @@ export function PartidaFormDialog({
   previoId,
   partida,
   nextNoPartida,
+  facturas = [],
   trigger,
 }: {
   previoId: string;
   partida?: Partida;
   nextNoPartida?: number;
+  facturas?: string[];
   trigger: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -65,10 +68,25 @@ export function PartidaFormDialog({
       <DialogTrigger render={trigger as React.ReactElement} />
       <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{partida ? `Editar partida ${partida.no_partida}` : "Nueva partida"}</DialogTitle>
+          <DialogTitle>{partida ? `Editar partida ${etiquetaPartida(partida)}` : "Nueva partida"}</DialogTitle>
         </DialogHeader>
         <form action={formAction} className="space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="factura">Factura</Label>
+              <Input
+                id="factura"
+                name="factura"
+                list={`facturas-${previoId}`}
+                placeholder={facturas.length > 0 ? "Elegir o escribir" : "Opcional"}
+                defaultValue={partida ? (partida.factura ?? "") : facturas.length === 1 ? facturas[0] : ""}
+              />
+              <datalist id={`facturas-${previoId}`}>
+                {facturas.map((f) => (
+                  <option key={f} value={f} />
+                ))}
+              </datalist>
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="um_comercial">UM Comercial</Label>
               <input type="hidden" name="um_comercial" value={umComercial} />

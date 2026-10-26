@@ -17,11 +17,19 @@ import { SendToFacturacionButton } from "./send-to-facturacion-button";
 import { ClassifyPartidaDialog } from "./classify-partida-dialog";
 import { GlosarPartidaDialog } from "./glosar-partida-dialog";
 import { ImportMorePartidasDialog } from "./import-more-partidas-dialog";
+import { etiquetaPartida } from "@/lib/partida";
 import { EstadoButton } from "../estado-button";
 import { ESTADO_LABELS } from "@/lib/previo-progreso";
 
-export default async function PrevioDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PrevioDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const { id } = await params;
+  const { carga } = await searchParams;
   const supabase = await createClient();
   const role = await getCurrentRole();
   const readOnly = isReadOnly(role);
@@ -69,6 +77,18 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
     : { data: [] as ClasificacionArancelaria[] };
 
   const sinFacturaCount = rows.filter((p) => p.sin_factura).length;
+
+  // Un grupo por factura en el orden en que aparecen; las sin factura al final.
+  // Con una sola factura (o ninguna) la tabla se ve sin encabezados de grupo.
+  const grupos = new Map<string, Partida[]>();
+  for (const p of rows) {
+    const key = p.sin_factura ? "__sin_factura__" : (p.factura ?? "");
+    const list = grupos.get(key) ?? [];
+    list.push(p);
+    grupos.set(key, list);
+  }
+  const agrupar = grupos.size > 1 && [...grupos.keys()].some((k) => k && k !== "__sin_factura__");
+  const facturasPrevio = [...new Set(rows.map((p) => p.factura).filter((f): f is string => Boolean(f)))];
   const sumaPesoPartidas = rows.reduce((acc, p) => acc + (p.peso ?? 0), 0);
   const pesoBruto = previo.peso_bruto ?? 0;
   const pesoDeltaPct = pesoBruto > 0 ? Math.abs(pesoBruto - sumaPesoPartidas) / pesoBruto : 0;
@@ -110,6 +130,12 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
           <PrevioHeaderForm previo={previo} readOnly={readOnly} />
         </CardContent>
       </Card>
+
+      {typeof carga === "string" && carga && (
+        <div className="rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          Se cargaron {carga}.
+        </div>
+      )}
 
       {showPesoWarning && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -154,7 +180,23 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((p) => {
+              {[...grupos.entries()].flatMap(([key, grupo]) => [
+                ...(agrupar
+                  ? [
+                      <TableRow key={`grupo-${key}`} className="bg-muted/60 hover:bg-muted/60">
+                        <TableCell colSpan={7} className="py-2 text-sm font-medium">
+                          {key === "__sin_factura__"
+                            ? `Sin factura · ${grupo.length} ${grupo.length === 1 ? "partida" : "partidas"}`
+                            : `${key ? `Factura ${key}` : "Sin número de factura"} · ${grupo.length} ${
+                                grupo.length === 1 ? "partida" : "partidas"
+                              } · ${grupo.reduce((s, p) => s + (p.peso ?? 0), 0).toFixed(2)} kg · $ ${grupo
+                                .reduce((s, p) => s + (p.total ?? 0), 0)
+                                .toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                        </TableCell>
+                      </TableRow>,
+                    ]
+                  : []),
+                ...grupo.map((p) => {
                 const attachments = attachmentsByPartida.get(p.id) ?? [];
                 const expectedTotal =
                   p.cant_factura != null && p.precio_unitario != null
@@ -205,7 +247,7 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
                         previoId={previo.id}
                         partidaId={p.id}
                         token={p.photo_token}
-                        noPartida={p.no_partida}
+                        etiqueta={etiquetaPartida(p)}
                         attachments={attachments}
                         readOnly={readOnly}
                         trigger={
@@ -252,6 +294,7 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
                             <PartidaFormDialog
                               previoId={previo.id}
                               partida={p}
+                              facturas={facturasPrevio}
                               trigger={
                                 <Button variant="ghost" size="sm">
                                   Editar
@@ -265,7 +308,8 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
                     </TableCell>
                   </TableRow>
                 );
-              })}
+              }),
+              ])}
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
@@ -280,6 +324,7 @@ export default async function PrevioDetailPage({ params }: { params: Promise<{ i
               <PartidaFormDialog
                 previoId={previo.id}
                 nextNoPartida={rows.length + 1}
+                facturas={facturasPrevio}
                 trigger={
                   <Button size="sm" variant="outline">
                     <PlusIcon className="size-4" /> Nueva partida

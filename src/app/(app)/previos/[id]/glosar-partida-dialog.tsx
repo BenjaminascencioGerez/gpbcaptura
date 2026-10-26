@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { AttachmentsPreview } from "./attachments-preview";
+import { etiquetaPartida } from "@/lib/partida";
 import type { Partida, PartidaAttachment } from "@/lib/types";
 
 export function GlosarPartidaDialog({
@@ -41,7 +42,7 @@ export function GlosarPartidaDialog({
       <DialogTrigger render={trigger as React.ReactElement} />
       <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Glosar partida {partida.no_partida ?? "(sin factura)"}</DialogTitle>
+          <DialogTitle>Glosar partida {etiquetaPartida(partida)}</DialogTitle>
         </DialogHeader>
 
         <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">

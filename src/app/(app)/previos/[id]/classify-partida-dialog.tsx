@@ -16,6 +16,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { AttachmentsPreview } from "./attachments-preview";
+import { etiquetaPartida } from "@/lib/partida";
 import type { ClasificacionArancelaria, Partida, PartidaAttachment } from "@/lib/types";
 
 export function ClassifyPartidaDialog({
@@ -70,7 +71,7 @@ export function ClassifyPartidaDialog({
       <DialogTrigger render={trigger as React.ReactElement} />
       <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Clasificar partida {partida.no_partida ?? "(sin factura)"}</DialogTitle>
+          <DialogTitle>Clasificar partida {etiquetaPartida(partida)}</DialogTitle>
         </DialogHeader>
 
         <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">

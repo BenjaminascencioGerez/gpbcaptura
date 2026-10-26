@@ -8,10 +8,12 @@ import { notifyEjecutivos } from "@/lib/notify";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parsePrevioExcel } from "@/lib/previo-excel";
 import { asignarRevisorSiFalta } from "@/lib/revisor";
+import { resumenPorFactura } from "@/lib/partida";
 
 type PartidaInput = {
   previo_id: string;
   no_partida: number | null;
+  factura: string | null;
   sin_factura: boolean;
   cant_factura: number | null;
   um_comercial: string | null;
@@ -47,6 +49,7 @@ function fromFormData(
   return {
     previo_id: previoId,
     no_partida: noPartida,
+    factura: str("factura"),
     sin_factura: noPartida === null,
     cant_factura: num("cant_factura"),
     um_comercial: str("um_comercial"),
@@ -106,18 +109,20 @@ export async function importMorePartidas(previoId: string, _prevState: { error: 
   const supabase = await createClient();
   const { data: existing, count } = await supabase
     .from("partidas")
-    .select("no_partida", { count: "exact" })
+    .select("no_partida, factura", { count: "exact" })
     .eq("previo_id", previoId);
 
-  const existingNumbers = new Set((existing ?? []).map((p) => p.no_partida).filter((n): n is number => n !== null));
-  // Las partidas sin número (sin_factura) nunca se consideran duplicadas —
+  // Una partida es la misma si coincide factura + No. de Partida (cada factura
+  // empieza en 1). Las sin número (sin_factura) nunca se consideran duplicadas —
   // no hay forma confiable de comparar sin un No. de Partida.
-  const newRows = parsed.partidas.filter((p) => p.no_partida === null || !existingNumbers.has(p.no_partida));
+  const clave = (p: { factura: string | null; no_partida: number | null }) => `${p.factura ?? ""}|${p.no_partida}`;
+  const existentes = new Set((existing ?? []).filter((p) => p.no_partida !== null).map(clave));
+  const newRows = parsed.partidas.filter((p) => p.no_partida === null || !existentes.has(clave(p)));
   const skipped = parsed.partidas.length - newRows.length;
 
   if (newRows.length === 0) {
     return {
-      error: `Las ${parsed.partidas.length} partidas del archivo ya existen en este previo (mismo No. de Partida) — no se agregó nada.`,
+      error: `Las ${parsed.partidas.length} partidas del archivo ya existen en este previo (misma factura y No. de Partida) — no se agregó nada.`,
     };
   }
 
@@ -135,8 +140,8 @@ export async function importMorePartidas(previoId: string, _prevState: { error: 
     skipped,
     message:
       skipped > 0
-        ? `Se agregaron ${newRows.length} partidas nuevas; se omitieron ${skipped} que ya existían (mismo No. de Partida).`
-        : `Se agregaron ${newRows.length} partidas nuevas.`,
+        ? `Se agregaron ${resumenPorFactura(newRows)}; se omitieron ${skipped} que ya existían (misma factura y No. de Partida).`
+        : `Se agregaron ${resumenPorFactura(newRows)}.`,
   };
 }
 
