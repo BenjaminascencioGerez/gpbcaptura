@@ -92,12 +92,11 @@ where p.estado = 'en_bodega'
 order by p.created_at;
 
 -- ===================== PARTE 2: mover a Historial de previos =====================
--- Correr después de revisar la vista previa. Agrega al NOT IN las referencias
--- de la vista previa que sí sigan en bodega.
-update previos p set estado = 'importado', importado_at = now()
-where p.estado = 'en_bodega'
-  and upper(p.reference) not in ('GER10606', 'GER10607', 'GER10608', 'GER10610')
-  and not exists (
-    select 1 from inventario_fisico i
-    where (ref_keys(i.referencia) || ref_keys(i.referencia_cliente))
-       && (ref_keys(p.reference) || ref_keys(p.referencia_cliente)));
+-- De la vista previa del 26/10 solo pasan los que tienen aviso de salida en Outlook:
+--   TOIM-0196I (orden 804, 16/10), GBI3576, GBI3528 y GER10525 (orden 2521, 22/10).
+-- Se quedan en Previos aunque no vengan en el Excel:
+--   GW0513 / GW0514 (revisión enviada el 26/10), GBI3571 Stahl (revisión 23/10, sin
+--   salida) y GBI3587 Oceaneering (salida parcial; parte se resguarda en bodega).
+update previos set estado = 'importado', importado_at = now()
+where estado = 'en_bodega'
+  and upper(reference) in ('TOIM-0196I', 'GBI3576', 'GBI3528', 'GER10525');
