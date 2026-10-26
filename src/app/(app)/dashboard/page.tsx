@@ -22,6 +22,7 @@ const ETAPA_COLOR: Record<Etapa, string> = {
 
 const SIN_CLIENTE = "Sin cliente";
 const SIN_REVISOR = "Sin revisor";
+const SIN_ASIGNAR = "Sin asignar";
 
 function diasEnBodega(p: Previo, hoy: Date): number | null {
   const desde = p.fecha_arribo ?? p.fecha;
@@ -39,6 +40,7 @@ export default async function DashboardPage({
   const filtro = (k: string) => (typeof params[k] === "string" ? (params[k] as string) : "");
   const fCliente = filtro("cliente");
   const fRevisor = filtro("revisor");
+  const fAsignado = filtro("asignado");
   const fEtapa = filtro("etapa");
   const fQ = filtro("q").trim().toUpperCase();
 
@@ -59,17 +61,44 @@ export default async function DashboardPage({
   const progreso = await cargarProgreso(supabase, enBodega);
 
   const filas = enBodega
-    .map((p) => ({
-      previo: p,
-      prog: progreso.get(p.id)!,
-      dias: diasEnBodega(p, hoy),
-      cliente: p.cliente?.trim() || SIN_CLIENTE,
-      revisor: p.revisor?.trim() || SIN_REVISOR,
-    }))
+    .map((p) => {
+      const prog = progreso.get(p.id)!;
+      // Quién lo tiene ahora: el clasificador o el glosador asignado, según su etapa.
+      const asignado =
+        prog.etapa === "clasificacion"
+          ? p.clasificador_nombre?.trim() || SIN_ASIGNAR
+          : prog.etapa === "glosa"
+            ? p.glosador_nombre?.trim() || SIN_ASIGNAR
+            : null;
+      return {
+        previo: p,
+        prog,
+        dias: diasEnBodega(p, hoy),
+        cliente: p.cliente?.trim() || SIN_CLIENTE,
+        revisor: p.revisor?.trim() || SIN_REVISOR,
+        asignado,
+      };
+    })
     .sort((a, b) => (b.dias ?? -1) - (a.dias ?? -1));
 
   const porEtapa = (e: Etapa) => filas.filter((f) => f.prog.etapa === e).length;
   const atorados = filas.filter((f) => (f.dias ?? 0) > DIAS_ATORADO).length;
+  const sinAsignar = (e: Etapa) => filas.filter((f) => f.prog.etapa === e && f.asignado === SIN_ASIGNAR).length;
+  const detalleAsignacion = (e: Etapa) =>
+    porEtapa(e) === 0 ? "Ninguno" : sinAsignar(e) > 0 ? `${sinAsignar(e)} sin asignar` : "Todos asignados";
+
+  // Carga de cada clasificador / glosador (previos que tiene pendientes).
+  const personas = new Map<string, { clasificar: number; glosar: number }>();
+  for (const f of filas) {
+    if (!f.asignado) continue;
+    const c = personas.get(f.asignado) ?? { clasificar: 0, glosar: 0 };
+    if (f.prog.etapa === "clasificacion") c.clasificar += 1;
+    else c.glosar += 1;
+    personas.set(f.asignado, c);
+  }
+  const porPersona = [...personas.entries()]
+    .map(([nombre, c]) => ({ nombre, ...c }))
+    .sort((a, b) => (a.nombre === SIN_ASIGNAR ? -1 : b.nombre === SIN_ASIGNAR ? 1 : b.clasificar + b.glosar - (a.clasificar + a.glosar)));
 
   // Pendientes por cliente, desglosados por etapa.
   const clientes = new Map<string, Record<Etapa, number>>();
@@ -85,17 +114,19 @@ export default async function DashboardPage({
 
   const opcionesCliente = [...new Set(filas.map((f) => f.cliente))].sort();
   const opcionesRevisor = [...new Set(filas.map((f) => f.revisor))].sort();
+  const opcionesAsignado = [...new Set(filas.map((f) => f.asignado).filter((a): a is string => Boolean(a)))].sort();
 
   const filtradas = filas.filter(
     (f) =>
       (!fCliente || f.cliente === fCliente) &&
       (!fRevisor || f.revisor === fRevisor) &&
+      (!fAsignado || f.asignado === fAsignado) &&
       (!fEtapa || f.prog.etapa === fEtapa) &&
       (!fQ ||
         f.previo.reference.toUpperCase().includes(fQ) ||
         (f.previo.referencia_cliente ?? "").toUpperCase().includes(fQ))
   );
-  const hayFiltros = Boolean(fCliente || fRevisor || fEtapa || fQ);
+  const hayFiltros = Boolean(fCliente || fRevisor || fAsignado || fEtapa || fQ);
 
   const selectClass =
     "h-9 rounded-md border border-input bg-background px-2 text-sm min-w-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -104,14 +135,23 @@ export default async function DashboardPage({
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Dashboard</h1>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         <Kpi titulo="Pendientes de revisar" valor={porEtapa("revision_fisica")} detalle="En revisión física" href="/dashboard?etapa=revision_fisica" />
         <Kpi
-          titulo="Pendientes de importar"
-          valor={filas.length}
-          detalle={`${porEtapa("clasificacion")} en clasificación · ${porEtapa("glosa")} en glosa`}
-          href="/previos"
+          titulo="Pendientes de clasificar"
+          valor={porEtapa("clasificacion")}
+          detalle={detalleAsignacion("clasificacion")}
+          href="/dashboard?etapa=clasificacion"
+          alerta={sinAsignar("clasificacion") > 0}
         />
+        <Kpi
+          titulo="Pendientes de glosar"
+          valor={porEtapa("glosa")}
+          detalle={detalleAsignacion("glosa")}
+          href="/dashboard?etapa=glosa"
+          alerta={sinAsignar("glosa") > 0}
+        />
+        <Kpi titulo="Pendientes de importar" valor={filas.length} detalle="Todos los que siguen en bodega" href="/previos" />
         <Kpi titulo="Importados este mes" valor={importadosMes ?? 0} detalle="Pasaron al historial" href="/historial" />
         <Kpi
           titulo={`Más de ${DIAS_ATORADO} días en bodega`}
@@ -120,6 +160,41 @@ export default async function DashboardPage({
           alerta={atorados > 0}
         />
       </div>
+
+      {porPersona.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Pendientes por clasificador y glosador</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Persona</TableHead>
+                  <TableHead className="text-right">Por clasificar</TableHead>
+                  <TableHead className="text-right">Por glosar</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {porPersona.map((p) => (
+                  <TableRow key={p.nombre}>
+                    <TableCell>
+                      <Link
+                        href={`/dashboard?asignado=${encodeURIComponent(p.nombre)}`}
+                        className={`hover:underline ${p.nombre === SIN_ASIGNAR ? "font-medium text-destructive" : ""}`}
+                      >
+                        {p.nombre}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{p.clasificar || "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{p.glosar || "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -186,6 +261,17 @@ export default async function DashboardPage({
               </select>
             </label>
             <label className="space-y-1 text-xs text-muted-foreground">
+              <span className="block">Asignado a</span>
+              <select name="asignado" defaultValue={fAsignado} className={selectClass}>
+                <option value="">Todos</option>
+                {opcionesAsignado.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs text-muted-foreground">
               <span className="block">Etapa</span>
               <select name="etapa" defaultValue={fEtapa} className={selectClass}>
                 <option value="">Todas</option>
@@ -226,7 +312,7 @@ export default async function DashboardPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtradas.map(({ previo: p, prog, dias, cliente, revisor }) => (
+              {filtradas.map(({ previo: p, prog, dias, cliente, revisor, asignado }) => (
                 <TableRow key={p.id}>
                   <TableCell>
                     <Link href={`/previos/${p.id}`} className="font-medium hover:underline">
@@ -237,11 +323,7 @@ export default async function DashboardPage({
                   <TableCell>{cliente}</TableCell>
                   <TableCell className={revisor === SIN_REVISOR ? "text-muted-foreground" : undefined}>{revisor}</TableCell>
                   <TableCell>
-                    {prog.etapa === "glosa"
-                      ? (p.glosador_nombre ?? "—")
-                      : prog.etapa === "clasificacion"
-                        ? (p.clasificador_nombre ?? "—")
-                        : "—"}
+                    {asignado === SIN_ASIGNAR ? <span className="text-destructive">{asignado}</span> : (asignado ?? "—")}
                   </TableCell>
                   <TableCell>{p.fecha_arribo ?? "—"}</TableCell>
                   <TableCell>
