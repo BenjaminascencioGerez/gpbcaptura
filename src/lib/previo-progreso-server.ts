@@ -15,6 +15,7 @@ export async function cargarProgreso(supabase: SupabaseClient, previos: Pick<
     | "enviado_glosa_final_at"
     | "glosado_final_at"
     | "etapa_manual"
+    | "sin_documentos"
   >[]) {
   const previoIds = previos.map((p) => p.id);
 

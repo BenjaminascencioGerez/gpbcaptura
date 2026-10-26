@@ -12,8 +12,9 @@ import { cargarProgreso } from "@/lib/previo-progreso-server";
 // A partir de cuántos días en bodega un previo se marca como atorado.
 const DIAS_ATORADO = 7;
 
-const ETAPAS_PENDIENTES: Etapa[] = ["revision_fisica", "clasificacion", "glosa", "documentacion", "glosa_final", "glosado"];
+const ETAPAS_PENDIENTES: Etapa[] = ["sin_documentos", "revision_fisica", "clasificacion", "glosa", "documentacion", "glosa_final", "glosado"];
 const ETAPA_COLOR: Record<Etapa, string> = {
+  sin_documentos: "bg-slate-500",
   revision_fisica: "bg-amber-500",
   clasificacion: "bg-sky-500",
   glosa: "bg-violet-500",
@@ -110,6 +111,7 @@ export default async function DashboardPage({
   const clientes = new Map<string, Record<Etapa, number>>();
   for (const f of filas) {
     const c = clientes.get(f.cliente) ?? {
+      sin_documentos: 0,
       revision_fisica: 0,
       clasificacion: 0,
       glosa: 0,
@@ -150,6 +152,13 @@ export default async function DashboardPage({
       <h1 className="text-2xl font-semibold">Dashboard</h1>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Kpi
+          titulo="Sin documentos"
+          valor={porEtapa("sin_documentos")}
+          detalle="Falta factura o packing list"
+          href="/dashboard?etapa=sin_documentos"
+          alerta={porEtapa("sin_documentos") > 0}
+        />
         <Kpi titulo="Pendientes de revisar" valor={porEtapa("revision_fisica")} detalle="En revisión física" href="/dashboard?etapa=revision_fisica" />
         <Kpi
           titulo="Pendientes de clasificar"

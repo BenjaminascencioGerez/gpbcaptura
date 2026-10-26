@@ -828,3 +828,25 @@ export async function marcarGlosado(previoId: string) {
   revalidatePath("/dashboard");
   return { error: "" };
 }
+
+// Marca o desmarca que al previo le faltan documentos comerciales.
+export async function marcarSinDocumentos(previoId: string, sinDocumentos: boolean, nota: string | null) {
+  const role = await getCurrentRole();
+  if (!role) return { error: "Inicia sesión de nuevo." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("previos")
+    .update({
+      sin_documentos: sinDocumentos,
+      sin_documentos_nota: sinDocumentos ? nota?.trim() || null : null,
+      sin_documentos_at: sinDocumentos ? new Date().toISOString() : null,
+    })
+    .eq("id", previoId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/previos/${previoId}`);
+  revalidatePath("/previos");
+  revalidatePath("/dashboard");
+  return { error: "" };
+}

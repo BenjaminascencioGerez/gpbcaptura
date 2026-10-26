@@ -35,6 +35,9 @@ export type Previo = {
   enviado_glosa_final_by: string | null;
   glosado_final_at: string | null;
   glosado_final_by: string | null;
+  sin_documentos: boolean;
+  sin_documentos_nota: string | null;
+  sin_documentos_at: string | null;
   etapa_manual: "revision_fisica" | "clasificacion" | "glosa" | "documentacion" | "glosa_final" | null;
   created_by: string | null;
   created_at: string;
