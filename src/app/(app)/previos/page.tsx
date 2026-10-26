@@ -2,10 +2,15 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { isReadOnly } from "@/lib/roles";
 import { getCurrentRole } from "@/lib/roles-server";
-import { PreviosTable } from "./previos-table";
+import { leerFiltros, PreviosTable } from "./previos-table";
 
-export default async function PreviosPage() {
+export default async function PreviosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const role = await getCurrentRole();
+  const filtros = leerFiltros(await searchParams);
 
   return (
     <div className="space-y-6">
@@ -22,6 +27,8 @@ export default async function PreviosPage() {
         estado="en_bodega"
         readOnly={isReadOnly(role)}
         emptyMessage="Aún no hay previos en bodega."
+        basePath="/previos"
+        filtros={filtros}
       />
     </div>
   );
