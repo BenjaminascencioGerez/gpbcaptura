@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { parsePrevioExcel } from "@/lib/previo-excel";
 import { isReadOnly } from "@/lib/roles";
 import { getCurrentRole } from "@/lib/roles-server";
+import { nombreDeUsuario } from "@/lib/revisor";
 
 export async function createPrevioManual(_prevState: { error: string } | null, formData: FormData) {
   const role = await getCurrentRole();
@@ -76,6 +77,7 @@ export async function importPrevioExcel(_prevState: { error: string } | null, fo
     .insert({
       reference: header.reference,
       cliente: header.cliente || null,
+      revisor: user ? nombreDeUsuario(user) || null : null,
       fecha: header.fecha ?? new Date().toISOString().slice(0, 10),
       bultos_tarimas: header.bultos_tarimas,
       peso_bruto: header.peso_bruto,

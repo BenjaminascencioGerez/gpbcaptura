@@ -7,6 +7,7 @@ import { getCurrentRole } from "@/lib/roles-server";
 import { notifyEjecutivos } from "@/lib/notify";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parsePrevioExcel } from "@/lib/previo-excel";
+import { asignarRevisorSiFalta } from "@/lib/revisor";
 
 type PartidaInput = {
   previo_id: string;
@@ -80,6 +81,7 @@ export async function addPartida(previoId: string, _prevState: { error: string }
     .insert({ ...fromFormData(previoId, formData, count ?? 0, true), sort_order: count ?? 0 });
 
   if (error) return { error: error.message };
+  await asignarRevisorSiFalta(supabase, previoId);
   revalidatePath(`/previos/${previoId}`);
   return { error: "" };
 }
@@ -125,6 +127,7 @@ export async function importMorePartidas(previoId: string, _prevState: { error: 
   );
 
   if (error) return { error: error.message };
+  await asignarRevisorSiFalta(supabase, previoId);
   revalidatePath(`/previos/${previoId}`);
   return {
     error: "",
@@ -408,6 +411,7 @@ export async function confirmOfficeUpload(
     }
   }
 
+  await asignarRevisorSiFalta(await createClient(), previoId);
   revalidatePath(`/previos/${previoId}`);
   return { error: "" };
 }
