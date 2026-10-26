@@ -9,7 +9,7 @@ import { listarUsuariosConRol } from "@/lib/usuarios-server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parsePrevioExcel } from "@/lib/previo-excel";
 import { asignarRevisorSiFalta } from "@/lib/revisor";
-import { resumenPorFactura } from "@/lib/partida";
+import { etiquetaPartida, resumenPorFactura } from "@/lib/partida";
 
 type PartidaInput = {
   previo_id: string;
@@ -265,6 +265,8 @@ export async function classifyPartida(
       classification_status: "clasificado",
       clasificado_by: user?.id ?? null,
       clasificado_at: new Date().toISOString(),
+      revision_estado: null,
+      revision_nota: null,
     })
     .eq("id", partidaId);
 
@@ -302,15 +304,21 @@ export async function classifyPartida(
   return { error: "" };
 }
 
-export async function glosarPartida(
+// Quien confirma las fracciones (rol Glosador) revisa cada partida:
+// - "confirmar": la aprueba; puede corregir la fracción/NICO antes de confirmar.
+// - "solicitar_info": pide documentos, datasheet o fotos más específicas.
+// - "regresar": la devuelve al clasificador para que la vuelva a clasificar.
+// En las dos últimas se avisa al clasificador del previo.
+export async function revisarFraccion(
   previoId: string,
   partidaId: string,
   _prevState: { error: string } | null,
   formData: FormData
 ) {
   const role = await getCurrentRole();
-  if (!canGlosar(role)) return { error: "No tienes permiso para glosar." };
+  if (!canGlosar(role)) return { error: "No tienes permiso para confirmar fracciones." };
 
+  const accion = String(formData.get("accion") ?? "");
   const supabase = await createClient();
   const {
     data: { user },
@@ -318,17 +326,78 @@ export async function glosarPartida(
 
   const { data: partidaActual } = await supabase
     .from("partidas")
-    .select("aplica_ma, clasificado_by, classification_status")
+    .select("aplica_ma, clasificado_by, classification_status, fraccion_arancelaria, nico, no_partida, factura")
     .eq("id", partidaId)
     .single();
+  if (!partidaActual) return { error: "Partida no encontrada." };
 
-  if (partidaActual?.classification_status !== "clasificado") {
+  if (partidaActual.classification_status !== "clasificado") {
     return { error: "Esta partida todavía no está clasificada." };
   }
-
   if (user && partidaActual.clasificado_by === user.id) {
-    return { error: "Quien clasifica no puede glosar la misma partida (separación de funciones)." };
+    return { error: "Quien clasifica no puede confirmar la misma partida (separación de funciones)." };
   }
+
+  const { data: previo } = await supabase
+    .from("previos")
+    .select("reference, clasificador_id")
+    .eq("id", previoId)
+    .single();
+  const etiqueta = etiquetaPartida(partidaActual);
+  const nota = String(formData.get("nota") ?? "").trim();
+  const ahora = new Date().toISOString();
+
+  if (accion === "solicitar_info" || accion === "regresar") {
+    if (!nota) {
+      return {
+        error:
+          accion === "regresar"
+            ? "Escribe el motivo para regresar la partida."
+            : "Escribe qué información se necesita (documentos, datasheet, fotos…).",
+      };
+    }
+    const { error } = await supabase
+      .from("partidas")
+      .update({
+        revision_estado: accion === "regresar" ? "devuelta" : "info_solicitada",
+        revision_nota: nota,
+        revision_by: user?.id ?? null,
+        revision_at: ahora,
+        glosado: false,
+        ...(accion === "regresar" ? { classification_status: "pendiente" } : {}),
+      })
+      .eq("id", partidaId);
+    if (error) return { error: error.message };
+
+    // Al regresar una partida, el previo vuelve a Clasificación con el mismo clasificador.
+    if (accion === "regresar") {
+      await supabase.from("previos").update({ enviado_glosa_at: null }).eq("id", previoId);
+    }
+
+    const destinatario = previo?.clasificador_id ?? partidaActual.clasificado_by;
+    await notifyUsuarios(
+      {
+        eventType: accion === "regresar" ? "partida_devuelta" : "partida_info_solicitada",
+        previoId,
+        partidaId,
+        payload: { reference: previo?.reference ?? "", partida: etiqueta, nota },
+      },
+      destinatario ? [destinatario] : []
+    );
+
+    revalidatePath(`/previos/${previoId}`);
+    revalidatePath("/dashboard");
+    return { error: "" };
+  }
+
+  if (accion !== "confirmar") return { error: "Acción no válida." };
+
+  const fraccion = String(formData.get("fraccion_arancelaria") ?? "").trim();
+  const nico = String(formData.get("nico") ?? "").trim() || null;
+  if (!/^\d{8}$/.test(fraccion)) {
+    return { error: "La fracción arancelaria debe tener exactamente 8 dígitos (TIGIE), sin puntos ni guiones." };
+  }
+  if (nico && !/^\d{2}$/.test(nico)) return { error: "El NICO debe tener exactamente 2 dígitos." };
 
   if (partidaActual.aplica_ma) {
     const { count } = await supabase
@@ -338,35 +407,85 @@ export async function glosarPartida(
       .eq("file_type", "document");
     if (!count) {
       return {
-        error: `Esta partida requiere "${partidaActual.aplica_ma}" — adjunta el documento/evidencia antes de glosar.`,
+        error: `Esta partida requiere "${partidaActual.aplica_ma}" — adjunta el documento/evidencia antes de confirmar.`,
       };
     }
   }
 
-  const notas = String(formData.get("notas_glosa") ?? "").trim() || null;
-
-  const { data: previo } = await supabase.from("previos").select("reference").eq("id", previoId).single();
+  const cambio =
+    fraccion !== (partidaActual.fraccion_arancelaria ?? "") || (nico ?? "") !== (partidaActual.nico ?? "");
+  const notaCambio = cambio
+    ? `Fracción corregida al confirmar: ${partidaActual.fraccion_arancelaria ?? "—"}${
+        partidaActual.nico ? `/${partidaActual.nico}` : ""
+      } → ${fraccion}${nico ? `/${nico}` : ""}`
+    : null;
+  const notas = [nota || null, notaCambio].filter(Boolean).join("\n") || null;
 
   const { error } = await supabase
     .from("partidas")
     .update({
+      fraccion_arancelaria: fraccion,
+      nico,
       glosado: true,
       glosado_by: user?.id ?? null,
-      glosado_at: new Date().toISOString(),
+      glosado_at: ahora,
       notas_glosa: notas,
+      revision_estado: null,
+      revision_nota: null,
     })
     .eq("id", partidaId);
-
   if (error) return { error: error.message };
 
   await notifyEjecutivos({
     eventType: "partida_glosada",
     previoId,
     partidaId,
-    payload: { reference: previo?.reference ?? "", notas: notas ?? "" },
+    payload: { reference: previo?.reference ?? "", partida: etiqueta, notas: notas ?? "" },
   });
 
   revalidatePath(`/previos/${previoId}`);
+  revalidatePath("/dashboard");
+  return { error: "" };
+}
+
+// Cuando todas las fracciones están confirmadas, el previo pasa a Documentación
+// y se habilita la descarga del Excel para capturar el pedimento.
+export async function enviarADocumentacion(previoId: string) {
+  const role = await getCurrentRole();
+  if (isReadOnly(role)) return { error: "Tu rol (Ejecutivo) solo tiene acceso de lectura." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: partidas } = await supabase
+    .from("partidas")
+    .select("glosado, revision_estado")
+    .eq("previo_id", previoId);
+  if (!partidas || partidas.length === 0) return { error: "El previo no tiene partidas." };
+  const sinConfirmar = partidas.filter((p) => !p.glosado || p.revision_estado).length;
+  if (sinConfirmar > 0) {
+    return { error: `Hay ${sinConfirmar} partida(s) con la fracción sin confirmar.` };
+  }
+
+  const { data: previo, error } = await supabase
+    .from("previos")
+    .update({ enviado_documentacion_at: new Date().toISOString(), enviado_documentacion_by: user?.id ?? null })
+    .eq("id", previoId)
+    .select("reference")
+    .single();
+  if (error || !previo) return { error: error?.message ?? "Previo no encontrado." };
+
+  await notifyEjecutivos({
+    eventType: "previo_enviado_documentacion",
+    previoId,
+    payload: { reference: previo.reference },
+  });
+
+  revalidatePath(`/previos/${previoId}`);
+  revalidatePath("/previos");
+  revalidatePath("/dashboard");
   return { error: "" };
 }
 
@@ -544,7 +663,7 @@ export async function enviarAGlosa(previoId: string, glosadorId: string) {
   const glosador = (await listarUsuariosConRol(["glosador", "administrador", "super_admin"])).find(
     (u) => u.id === glosadorId
   );
-  if (!glosador) return { error: "Selecciona un usuario con rol de Glosador." };
+  if (!glosador) return { error: "Selecciona quién va a confirmar las fracciones (rol Glosador)." };
 
   const supabase = await createClient();
   const {
@@ -557,7 +676,7 @@ export async function enviarAGlosa(previoId: string, glosadorId: string) {
     .eq("previo_id", previoId)
     .eq("classification_status", "pendiente");
   if (pendientes && pendientes > 0) {
-    return { error: `Hay ${pendientes} partida(s) sin clasificar — clasifícalas antes de enviar a glosa.` };
+    return { error: `Hay ${pendientes} partida(s) sin clasificar — clasifícalas antes de enviar las fracciones.` };
   }
 
   const { data: previo, error } = await supabase

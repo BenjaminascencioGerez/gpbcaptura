@@ -2,16 +2,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Partida, Previo } from "./types";
 import { calcularProgreso } from "./previo-progreso";
 
-type PartidaProgreso = Pick<Partida, "id" | "previo_id" | "photo_url" | "classification_status">;
+type PartidaProgreso = Pick<Partida, "id" | "previo_id" | "photo_url" | "classification_status" | "revision_estado">;
 
 // Avance y etapa de varios previos con dos consultas (partidas + adjuntos).
-export async function cargarProgreso(supabase: SupabaseClient, previos: Pick<Previo, "id" | "status" | "enviado_clasificacion_at" | "enviado_glosa_at">[]) {
+export async function cargarProgreso(supabase: SupabaseClient, previos: Pick<Previo, "id" | "status" | "enviado_clasificacion_at" | "enviado_glosa_at" | "enviado_documentacion_at">[]) {
   const previoIds = previos.map((p) => p.id);
 
   const { data: partidasData } = previoIds.length
     ? await supabase
         .from("partidas")
-        .select("id, previo_id, photo_url, classification_status")
+        .select("id, previo_id, photo_url, classification_status, revision_estado")
         .in("previo_id", previoIds)
         .returns<PartidaProgreso[]>()
     : { data: [] as PartidaProgreso[] };

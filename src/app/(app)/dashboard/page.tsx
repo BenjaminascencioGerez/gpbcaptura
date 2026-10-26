@@ -12,11 +12,12 @@ import { cargarProgreso } from "@/lib/previo-progreso-server";
 // A partir de cuántos días en bodega un previo se marca como atorado.
 const DIAS_ATORADO = 7;
 
-const ETAPAS_PENDIENTES: Etapa[] = ["revision_fisica", "clasificacion", "glosa"];
+const ETAPAS_PENDIENTES: Etapa[] = ["revision_fisica", "clasificacion", "glosa", "documentacion"];
 const ETAPA_COLOR: Record<Etapa, string> = {
   revision_fisica: "bg-amber-500",
   clasificacion: "bg-sky-500",
   glosa: "bg-violet-500",
+  documentacion: "bg-teal-500",
   enviado_facturacion: "bg-emerald-500",
 };
 
@@ -103,7 +104,7 @@ export default async function DashboardPage({
   // Pendientes por cliente, desglosados por etapa.
   const clientes = new Map<string, Record<Etapa, number>>();
   for (const f of filas) {
-    const c = clientes.get(f.cliente) ?? { revision_fisica: 0, clasificacion: 0, glosa: 0, enviado_facturacion: 0 };
+    const c = clientes.get(f.cliente) ?? { revision_fisica: 0, clasificacion: 0, glosa: 0, documentacion: 0, enviado_facturacion: 0 };
     c[f.prog.etapa] += 1;
     clientes.set(f.cliente, c);
   }
@@ -135,7 +136,7 @@ export default async function DashboardPage({
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Dashboard</h1>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Kpi titulo="Pendientes de revisar" valor={porEtapa("revision_fisica")} detalle="En revisión física" href="/dashboard?etapa=revision_fisica" />
         <Kpi
           titulo="Pendientes de clasificar"
@@ -145,11 +146,17 @@ export default async function DashboardPage({
           alerta={sinAsignar("clasificacion") > 0}
         />
         <Kpi
-          titulo="Pendientes de glosar"
+          titulo="Pendientes de confirmar fracciones"
           valor={porEtapa("glosa")}
           detalle={detalleAsignacion("glosa")}
           href="/dashboard?etapa=glosa"
           alerta={sinAsignar("glosa") > 0}
+        />
+        <Kpi
+          titulo="En documentación"
+          valor={porEtapa("documentacion")}
+          detalle="Listos para capturar pedimento"
+          href="/dashboard?etapa=documentacion"
         />
         <Kpi titulo="Pendientes de importar" valor={filas.length} detalle="Todos los que siguen en bodega" href="/previos" />
         <Kpi titulo="Importados este mes" valor={importadosMes ?? 0} detalle="Pasaron al historial" href="/historial" />
@@ -164,7 +171,7 @@ export default async function DashboardPage({
       {porPersona.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Pendientes por clasificador y glosador</CardTitle>
+            <CardTitle className="text-base">Pendientes por clasificador y por quien confirma</CardTitle>
           </CardHeader>
           <CardContent className="p-0 overflow-x-auto">
             <Table>
@@ -172,7 +179,7 @@ export default async function DashboardPage({
                 <TableRow>
                   <TableHead>Persona</TableHead>
                   <TableHead className="text-right">Por clasificar</TableHead>
-                  <TableHead className="text-right">Por glosar</TableHead>
+                  <TableHead className="text-right">Por confirmar</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -343,6 +350,12 @@ export default async function DashboardPage({
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">{ETAPA_LABELS[prog.etapa]}</Badge>
+                    {prog.devueltas > 0 && (
+                      <div className="mt-1 text-xs text-destructive">{prog.devueltas} regresada(s)</div>
+                    )}
+                    {prog.infoSolicitada > 0 && (
+                      <div className="mt-1 text-xs text-amber-700">{prog.infoSolicitada} con info solicitada</div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

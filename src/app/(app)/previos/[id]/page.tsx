@@ -19,6 +19,8 @@ import { GlosarPartidaDialog } from "./glosar-partida-dialog";
 import { ImportMorePartidasDialog } from "./import-more-partidas-dialog";
 import { etiquetaPartida } from "@/lib/partida";
 import { AsignarDialog } from "./asignar-dialog";
+import { EnviarDocumentacionButton } from "./enviar-documentacion-button";
+import { DownloadIcon } from "lucide-react";
 import { listarUsuariosConRol } from "@/lib/usuarios-server";
 import { EstadoButton } from "../estado-button";
 import { ESTADO_LABELS } from "@/lib/previo-progreso";
@@ -80,6 +82,7 @@ export default async function PrevioDetailPage({
 
   const sinFacturaCount = rows.filter((p) => p.sin_factura).length;
   const pendientesClasificar = rows.filter((p) => p.classification_status === "pendiente").length;
+  const todasConfirmadas = rows.length > 0 && rows.every((p) => p.glosado && !p.revision_estado);
   const sinFoto = rows.filter((p) => !p.photo_url && !(attachmentsByPartida.get(p.id)?.length)).length;
   const asignables = readOnly
     ? []
@@ -124,7 +127,7 @@ export default async function PrevioDetailPage({
               {ESTADO_LABELS[previo.estado]}
             </Badge>
           </h1>
-          {(previo.enviado_clasificacion_at || previo.enviado_glosa_at) && (
+          {(previo.enviado_clasificacion_at || previo.enviado_glosa_at || previo.enviado_documentacion_at) && (
             <p className="mt-1 text-sm text-muted-foreground">
               {previo.enviado_clasificacion_at && (
                 <>
@@ -135,8 +138,13 @@ export default async function PrevioDetailPage({
               {previo.enviado_clasificacion_at && previo.enviado_glosa_at && " · "}
               {previo.enviado_glosa_at && (
                 <>
-                  Glosa: <span className="text-foreground">{previo.glosador_nombre ?? "—"}</span> (
+                  Confirma fracciones: <span className="text-foreground">{previo.glosador_nombre ?? "—"}</span> (
                   {fechaCorta(previo.enviado_glosa_at)})
+                </>
+              )}
+              {previo.enviado_documentacion_at && (
+                <>
+                  {" · "}Documentación ({fechaCorta(previo.enviado_documentacion_at)})
                 </>
               )}
             </p>
@@ -163,7 +171,7 @@ export default async function PrevioDetailPage({
                 }
               />
             )}
-            {previo.status !== "sent" && previo.enviado_clasificacion_at && (
+            {previo.status !== "sent" && previo.enviado_clasificacion_at && !previo.enviado_documentacion_at && (
               <AsignarDialog
                 previoId={previo.id}
                 tipo="glosa"
@@ -171,18 +179,26 @@ export default async function PrevioDetailPage({
                 asignadoId={previo.glosador_id}
                 aviso={
                   pendientesClasificar > 0
-                    ? `Faltan ${pendientesClasificar} partida(s) por clasificar; no se puede enviar a glosa todavía.`
+                    ? `Faltan ${pendientesClasificar} partida(s) por clasificar; no se pueden enviar las fracciones todavía.`
                     : undefined
                 }
                 trigger={
                   <Button variant={previo.enviado_glosa_at ? "outline" : "default"}>
-                    {previo.enviado_glosa_at ? "Reasignar glosador" : "Enviar a glosa"}
+                    {previo.enviado_glosa_at ? "Reasignar quién confirma" : "Enviar fracciones"}
                   </Button>
                 }
               />
             )}
+            {previo.status !== "sent" && previo.enviado_glosa_at && todasConfirmadas && !previo.enviado_documentacion_at && (
+              <EnviarDocumentacionButton previoId={previo.id} />
+            )}
             <SendToFacturacionButton previoId={previo.id} disabled={previo.status === "sent"} />
           </div>
+        )}
+        {previo.enviado_documentacion_at && (
+          <Button variant="outline" nativeButton={false} render={<a href={`/previos/${previo.id}/pedimento`} />}>
+            <DownloadIcon className="size-4" /> Descargar Excel para pedimento
+          </Button>
         )}
       </div>
 
@@ -238,7 +254,7 @@ export default async function PrevioDetailPage({
                 <TableHead>Descripción</TableHead>
                 <TableHead>Fracción</TableHead>
                 <TableHead>Clasificación</TableHead>
-                <TableHead>Glosa</TableHead>
+                <TableHead>Confirmación</TableHead>
                 <TableHead>Adjuntos</TableHead>
                 <TableHead></TableHead>
               </TableRow>
@@ -286,6 +302,16 @@ export default async function PrevioDetailPage({
                           Requiere agregarse a una factura nueva
                         </div>
                       )}
+                      {p.revision_estado && p.revision_nota && (
+                        <div
+                          className={`text-xs mt-0.5 whitespace-normal ${
+                            p.revision_estado === "devuelta" ? "text-destructive" : "text-amber-700"
+                          }`}
+                        >
+                          {p.revision_estado === "devuelta" ? "Regresada: " : "Se solicita: "}
+                          {p.revision_nota}
+                        </div>
+                      )}
                       {totalMismatch && (
                         <div className="text-xs text-destructive mt-0.5">
                           ⚠ cant. × precio ({expectedTotal?.toFixed(2)}) ≠ total ({p.total})
@@ -302,9 +328,17 @@ export default async function PrevioDetailPage({
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={p.glosado ? "default" : "secondary"}>
-                        {p.glosado ? "Glosada" : "Pendiente"}
-                      </Badge>
+                      {p.revision_estado === "devuelta" ? (
+                        <Badge variant="destructive">Devuelta</Badge>
+                      ) : p.revision_estado === "info_solicitada" ? (
+                        <Badge variant="outline" className="border-amber-400 text-amber-700">
+                          Info solicitada
+                        </Badge>
+                      ) : (
+                        <Badge variant={p.glosado ? "default" : "secondary"}>
+                          {p.glosado ? "Confirmada" : "Pendiente"}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       <PartidaLinkDialog
@@ -348,7 +382,7 @@ export default async function PrevioDetailPage({
                             attachments={attachments}
                             trigger={
                               <Button variant="ghost" size="sm">
-                                Glosar
+                                Revisar fracción
                               </Button>
                             }
                           />

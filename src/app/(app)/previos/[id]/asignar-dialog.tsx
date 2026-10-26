@@ -35,14 +35,14 @@ export function AsignarDialog({
   const [open, setOpen] = useState(false);
   const [usuarioId, setUsuarioId] = useState(asignadoId ?? "");
   const [pending, startTransition] = useTransition();
-  const etiqueta = tipo === "clasificacion" ? "clasificador" : "glosador";
+  const etiqueta = tipo === "clasificacion" ? "clasificador" : "responsable de confirmar las fracciones";
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={trigger} />
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{tipo === "clasificacion" ? "Enviar a clasificación" : "Enviar a glosa"}</DialogTitle>
+          <DialogTitle>{tipo === "clasificacion" ? "Enviar a clasificación" : "Enviar fracciones"}</DialogTitle>
           <DialogDescription>
             {asignadoId
               ? `Cambia el ${etiqueta} asignado a este previo.`
@@ -50,10 +50,11 @@ export function AsignarDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Label htmlFor={`usuario-${tipo}`}>{etiqueta === "clasificador" ? "Clasificador" : "Glosador"}</Label>
+          <Label htmlFor={`usuario-${tipo}`}>{tipo === "clasificacion" ? "Clasificador" : "Quién confirma las fracciones"}</Label>
           {usuarios.length === 0 ? (
             <p className="text-sm text-destructive">
-              No hay usuarios con rol de {etiqueta}. Un Administrador lo asigna en Usuarios.
+              No hay usuarios con rol de {tipo === "clasificacion" ? "Clasificador" : "Glosador"}. Un Administrador lo
+              asigna en Usuarios.
             </p>
           ) : (
             <select
@@ -83,7 +84,7 @@ export function AsignarDialog({
                     : await enviarAGlosa(previoId, usuarioId);
                 if (res.error) toast.error(res.error);
                 else {
-                  toast.success(tipo === "clasificacion" ? "Enviado a clasificación" : "Enviado a glosa");
+                  toast.success(tipo === "clasificacion" ? "Enviado a clasificación" : "Fracciones enviadas");
                   setOpen(false);
                 }
               })
