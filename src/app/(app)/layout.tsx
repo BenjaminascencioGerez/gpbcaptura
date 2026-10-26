@@ -19,10 +19,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <header className="border-b bg-background">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-6">
-            <Link href="/previos">
+            <Link href="/dashboard">
               <Image src="/gpb-logo.png" alt="GPB Forwarding LLC." width={160} height={53} />
             </Link>
             <nav className="flex gap-4 text-sm font-medium">
+              <Link href="/dashboard" className="text-muted-foreground hover:text-foreground">
+                Dashboard
+              </Link>
               <Link href="/previos" className="text-muted-foreground hover:text-foreground">
                 Previos
               </Link>

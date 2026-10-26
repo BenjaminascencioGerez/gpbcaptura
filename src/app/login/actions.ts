@@ -14,7 +14,7 @@ export async function signIn(_prevState: { error: string } | null, formData: For
     return { error: "Correo o contraseña incorrectos." };
   }
 
-  redirect("/previos");
+  redirect("/dashboard");
 }
 
 export async function signOut() {

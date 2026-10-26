@@ -10,8 +10,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { Partida, Previo } from "@/lib/types";
-import { calcularProgreso, ESTADO_LABELS, ETAPA_LABELS, totalBultos } from "@/lib/previo-progreso";
+import type { Previo } from "@/lib/types";
+import { ESTADO_LABELS, ETAPA_LABELS, totalBultos } from "@/lib/previo-progreso";
+import { cargarProgreso } from "@/lib/previo-progreso-server";
 import { EstadoButton } from "./estado-button";
 
 export async function PreviosTable({
@@ -32,32 +33,7 @@ export async function PreviosTable({
     .returns<Previo[]>();
 
   const rows = previos ?? [];
-  const previoIds = rows.map((p) => p.id);
-
-  const { data: partidasData } = previoIds.length
-    ? await supabase
-        .from("partidas")
-        .select("id, previo_id, photo_url, classification_status")
-        .in("previo_id", previoIds)
-        .returns<Pick<Partida, "id" | "previo_id" | "photo_url" | "classification_status">[]>()
-    : { data: [] };
-
-  const partidas = partidasData ?? [];
-  const { data: adjuntosData } = partidas.length
-    ? await supabase
-        .from("partida_attachments")
-        .select("partida_id")
-        .in("partida_id", partidas.map((p) => p.id))
-        .returns<{ partida_id: string }[]>()
-    : { data: [] };
-
-  const conAdjunto = new Set((adjuntosData ?? []).map((a) => a.partida_id));
-  const partidasPorPrevio = new Map<string, typeof partidas>();
-  for (const p of partidas) {
-    const list = partidasPorPrevio.get(p.previo_id) ?? [];
-    list.push(p);
-    partidasPorPrevio.set(p.previo_id, list);
-  }
+  const progreso = await cargarProgreso(supabase, rows);
 
   return (
     <Card>
@@ -83,7 +59,7 @@ export async function PreviosTable({
           </TableHeader>
           <TableBody>
             {rows.map((p) => {
-              const prog = calcularProgreso(p, partidasPorPrevio.get(p.id) ?? [], conAdjunto);
+              const prog = progreso.get(p.id)!;
               return (
                 <TableRow key={p.id}>
                   <TableCell>
