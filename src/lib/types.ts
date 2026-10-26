@@ -29,6 +29,13 @@ export type Previo = {
   enviado_glosa_by: string | null;
   enviado_documentacion_at: string | null;
   enviado_documentacion_by: string | null;
+  glosa_final_id: string | null;
+  glosa_final_nombre: string | null;
+  enviado_glosa_final_at: string | null;
+  enviado_glosa_final_by: string | null;
+  glosado_final_at: string | null;
+  glosado_final_by: string | null;
+  etapa_manual: "revision_fisica" | "clasificacion" | "glosa" | "documentacion" | "glosa_final" | null;
   created_by: string | null;
   created_at: string;
 };

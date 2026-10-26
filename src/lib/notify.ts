@@ -9,7 +9,9 @@ type NotifyEvent = {
     | "previo_enviado_glosa"
     | "partida_info_solicitada"
     | "partida_devuelta"
-    | "previo_enviado_documentacion";
+    | "previo_enviado_documentacion"
+    | "previo_enviado_glosa_final"
+    | "previo_glosado";
   previoId: string;
   partidaId?: string;
   payload: Record<string, unknown>;
@@ -85,6 +87,10 @@ function subjectFor(event: NotifyEvent): string {
       return `Partida regresada a clasificación — ${event.payload.reference ?? ""} partida ${event.payload.partida ?? ""}`;
     case "previo_enviado_documentacion":
       return `Previo listo para documentación — ${event.payload.reference ?? ""}`;
+    case "previo_enviado_glosa_final":
+      return `Pedimento por glosar — ${event.payload.reference ?? ""}`;
+    case "previo_glosado":
+      return `Previo glosado, listo para facturación — ${event.payload.reference ?? ""}`;
   }
 }
 

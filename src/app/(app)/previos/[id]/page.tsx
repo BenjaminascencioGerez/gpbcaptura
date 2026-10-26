@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ClasificacionArancelaria, Partida, PartidaAttachment, Previo } from "@/lib/types";
-import { canClassify, canGlosar, isReadOnly } from "@/lib/roles";
+import { canClassify, canDocumentar, canGlosar, isReadOnly, isSuperAdmin } from "@/lib/roles";
 import { getCurrentRole } from "@/lib/roles-server";
 import { PrevioHeaderForm } from "./previo-header-form";
 import { PartidaFormDialog } from "./partida-form-dialog";
@@ -20,6 +20,9 @@ import { ImportMorePartidasDialog } from "./import-more-partidas-dialog";
 import { etiquetaPartida } from "@/lib/partida";
 import { AsignarDialog } from "./asignar-dialog";
 import { EnviarDocumentacionButton } from "./enviar-documentacion-button";
+import { CambiarEtapaControl } from "./cambiar-etapa-control";
+import { MarcarGlosadoButton } from "./marcar-glosado-button";
+import { calcularProgreso } from "@/lib/previo-progreso";
 import { DownloadIcon } from "lucide-react";
 import { listarUsuariosConRol } from "@/lib/usuarios-server";
 import { EstadoButton } from "../estado-button";
@@ -83,10 +86,15 @@ export default async function PrevioDetailPage({
   const sinFacturaCount = rows.filter((p) => p.sin_factura).length;
   const pendientesClasificar = rows.filter((p) => p.classification_status === "pendiente").length;
   const todasConfirmadas = rows.length > 0 && rows.every((p) => p.glosado && !p.revision_estado);
+  const superAdmin = isSuperAdmin(role);
+  const etapaActual = calcularProgreso(
+    previo,
+    rows,
+    new Set(rows.filter((p) => attachmentsByPartida.get(p.id)?.length).map((p) => p.id))
+  ).etapa;
   const sinFoto = rows.filter((p) => !p.photo_url && !(attachmentsByPartida.get(p.id)?.length)).length;
-  const asignables = readOnly
-    ? []
-    : await listarUsuariosConRol(["clasificador", "glosador", "administrador", "super_admin"]);
+  // Ejecutivos también necesitan la lista (envían a glosa desde Documentación).
+  const asignables = await listarUsuariosConRol(["clasificador", "glosador", "administrador", "super_admin"]);
   const clasificadores = asignables.filter((u) => u.role !== "glosador");
   const glosadores = asignables.filter((u) => u.role !== "clasificador");
   const fechaCorta = (iso: string) =>
@@ -147,11 +155,21 @@ export default async function PrevioDetailPage({
                   {" · "}Documentación ({fechaCorta(previo.enviado_documentacion_at)})
                 </>
               )}
+              {previo.enviado_glosa_final_at && (
+                <>
+                  {" · "}Glosa: <span className="text-foreground">{previo.glosa_final_nombre ?? "—"}</span> (
+                  {fechaCorta(previo.enviado_glosa_final_at)})
+                </>
+              )}
+              {previo.glosado_final_at && <>{" · "}Glosado ({fechaCorta(previo.glosado_final_at)})</>}
             </p>
           )}
         </div>
         {!readOnly && (
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {superAdmin && previo.status !== "sent" && (
+              <CambiarEtapaControl previoId={previo.id} etapaActual={etapaActual} />
+            )}
             <EstadoButton previoId={previo.id} estado={previo.estado} reference={previo.reference} />
             {previo.status !== "sent" && (
               <AsignarDialog
@@ -165,7 +183,10 @@ export default async function PrevioDetailPage({
                     : undefined
                 }
                 trigger={
-                  <Button variant={previo.enviado_clasificacion_at ? "outline" : "default"} disabled={rows.length === 0}>
+                  <Button
+                    variant={previo.enviado_clasificacion_at ? "outline" : "default"}
+                    disabled={rows.length === 0 && !superAdmin}
+                  >
                     {previo.enviado_clasificacion_at ? "Reasignar clasificador" : "Enviar a clasificación"}
                   </Button>
                 }
@@ -175,7 +196,7 @@ export default async function PrevioDetailPage({
               <AsignarDialog
                 previoId={previo.id}
                 tipo="glosa"
-                usuarios={glosadores}
+                usuarios={clasificadores}
                 asignadoId={previo.glosador_id}
                 aviso={
                   pendientesClasificar > 0
@@ -189,16 +210,37 @@ export default async function PrevioDetailPage({
                 }
               />
             )}
-            {previo.status !== "sent" && previo.enviado_glosa_at && todasConfirmadas && !previo.enviado_documentacion_at && (
+            {previo.status !== "sent" &&
+              previo.enviado_glosa_at &&
+              (todasConfirmadas || superAdmin) &&
+              !previo.enviado_documentacion_at && (
               <EnviarDocumentacionButton previoId={previo.id} />
             )}
             <SendToFacturacionButton previoId={previo.id} disabled={previo.status === "sent"} />
           </div>
         )}
         {previo.enviado_documentacion_at && (
-          <Button variant="outline" nativeButton={false} render={<a href={`/previos/${previo.id}/pedimento`} />}>
-            <DownloadIcon className="size-4" /> Descargar Excel para pedimento
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button variant="outline" nativeButton={false} render={<a href={`/previos/${previo.id}/pedimento`} />}>
+              <DownloadIcon className="size-4" /> Descargar Excel para pedimento
+            </Button>
+            {previo.status !== "sent" && !previo.glosado_final_at && canDocumentar(role) && (
+              <AsignarDialog
+                previoId={previo.id}
+                tipo="glosa_final"
+                usuarios={glosadores}
+                asignadoId={previo.glosa_final_id}
+                trigger={
+                  <Button variant={previo.enviado_glosa_final_at ? "outline" : "default"}>
+                    {previo.enviado_glosa_final_at ? "Reasignar glosador" : "Enviar a glosa"}
+                  </Button>
+                }
+              />
+            )}
+            {previo.status !== "sent" && previo.enviado_glosa_final_at && !previo.glosado_final_at && canGlosar(role) && (
+              <MarcarGlosadoButton previoId={previo.id} />
+            )}
+          </div>
         )}
       </div>
 
@@ -373,7 +415,7 @@ export default async function PrevioDetailPage({
                             }
                           />
                         )}
-                        {canGlosar(role) &&
+                        {canClassify(role) &&
                           p.classification_status === "clasificado" &&
                           p.clasificado_by !== currentUser?.id && (
                           <GlosarPartidaDialog

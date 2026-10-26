@@ -40,3 +40,14 @@ export function canCapture(role: Role | null): boolean {
 export function isReadOnly(role: Role | null): boolean {
   return role === "ejecutivo";
 }
+
+// Solo el Super Admin puede adelantar o regresar etapas sin cumplir validaciones.
+export function isSuperAdmin(role: Role | null): boolean {
+  return role === "super_admin";
+}
+
+// Documentación: los Ejecutivos (solo lectura en lo demás) descargan el Excel y
+// envían el previo a glosa.
+export function canDocumentar(role: Role | null): boolean {
+  return role === "ejecutivo" || role === "administrador" || role === "super_admin";
+}

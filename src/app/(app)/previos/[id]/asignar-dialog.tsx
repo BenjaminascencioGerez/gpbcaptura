@@ -14,7 +14,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import type { UsuarioAsignable } from "@/lib/usuarios-server";
-import { enviarAClasificacion, enviarAGlosa } from "./actions";
+import { enviarAClasificacion, enviarAGlosa, enviarAGlosaFinal } from "./actions";
 
 // "Enviar a clasificación" / "Enviar a glosa": elige a la persona y asigna el previo.
 export function AsignarDialog({
@@ -26,7 +26,7 @@ export function AsignarDialog({
   trigger,
 }: {
   previoId: string;
-  tipo: "clasificacion" | "glosa";
+  tipo: "clasificacion" | "glosa" | "glosa_final";
   usuarios: UsuarioAsignable[];
   asignadoId: string | null;
   aviso?: string;
@@ -35,14 +35,21 @@ export function AsignarDialog({
   const [open, setOpen] = useState(false);
   const [usuarioId, setUsuarioId] = useState(asignadoId ?? "");
   const [pending, startTransition] = useTransition();
-  const etiqueta = tipo === "clasificacion" ? "clasificador" : "responsable de confirmar las fracciones";
+  const etiqueta =
+    tipo === "clasificacion"
+      ? "clasificador"
+      : tipo === "glosa"
+        ? "responsable de confirmar las fracciones"
+        : "glosador";
+  const titulo =
+    tipo === "clasificacion" ? "Enviar a clasificación" : tipo === "glosa" ? "Enviar fracciones" : "Enviar a glosa";
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={trigger} />
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{tipo === "clasificacion" ? "Enviar a clasificación" : "Enviar fracciones"}</DialogTitle>
+          <DialogTitle>{titulo}</DialogTitle>
           <DialogDescription>
             {asignadoId
               ? `Cambia el ${etiqueta} asignado a este previo.`
@@ -50,10 +57,12 @@ export function AsignarDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Label htmlFor={`usuario-${tipo}`}>{tipo === "clasificacion" ? "Clasificador" : "Quién confirma las fracciones"}</Label>
+          <Label htmlFor={`usuario-${tipo}`}>
+            {tipo === "clasificacion" ? "Clasificador" : tipo === "glosa" ? "Quién confirma las fracciones" : "Glosador"}
+          </Label>
           {usuarios.length === 0 ? (
             <p className="text-sm text-destructive">
-              No hay usuarios con rol de {tipo === "clasificacion" ? "Clasificador" : "Glosador"}. Un Administrador lo
+              No hay usuarios con rol de {tipo === "glosa_final" ? "Glosador" : "Clasificador"}. Un Administrador lo
               asigna en Usuarios.
             </p>
           ) : (
@@ -81,10 +90,18 @@ export function AsignarDialog({
                 const res =
                   tipo === "clasificacion"
                     ? await enviarAClasificacion(previoId, usuarioId)
-                    : await enviarAGlosa(previoId, usuarioId);
+                    : tipo === "glosa"
+                      ? await enviarAGlosa(previoId, usuarioId)
+                      : await enviarAGlosaFinal(previoId, usuarioId);
                 if (res.error) toast.error(res.error);
                 else {
-                  toast.success(tipo === "clasificacion" ? "Enviado a clasificación" : "Fracciones enviadas");
+                  toast.success(
+                    tipo === "clasificacion"
+                      ? "Enviado a clasificación"
+                      : tipo === "glosa"
+                        ? "Fracciones enviadas"
+                        : "Enviado a glosa"
+                  );
                   setOpen(false);
                 }
               })
