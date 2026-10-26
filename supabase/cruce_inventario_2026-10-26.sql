@@ -8,10 +8,14 @@
 
 -- ===================== PARTE 1: cargar, completar y vista previa =====================
 
--- Referencia comparable: mayúsculas, sin espacios y sin sufijo de parcialidad (-1, -2).
-create or replace function ref_norm(t text) returns text
-  language sql immutable
-  as $$ select nullif(regexp_replace(upper(replace(coalesce(t, ''), ' ', '')), '-\d+$', ''), '') $$;
+-- Claves comparables de una referencia: separa por "/" (p. ej. "GW0514 / TPIM-0947"),
+-- quita espacios, el sufijo de parcialidad (GW0502-1 -> GW0502) y los guiones
+-- (PRY-0229 -> PRY0229), en mayúsculas.
+create or replace function ref_keys(t text) returns text[] language sql immutable as $$
+  select coalesce(array_agg(k), '{}') from (
+    select replace(regexp_replace(upper(regexp_replace(part, '\s', '', 'g')), '^([A-Z]+[0-9]+)-[0-9]{1,2}$', '\1'), '-', '') k
+    from unnest(string_to_array(coalesce(t, ''), '/')) part) s
+  where k <> '' $$;
 
 create table inventario_fisico (
   referencia text primary key,
@@ -72,8 +76,8 @@ update previos p set
   bultos_inventario  = coalesce(p.bultos_inventario, i.bultos),
   peso_bruto         = coalesce(p.peso_bruto, i.peso)
 from inventario_fisico i
-where ref_norm(i.referencia) in (ref_norm(p.reference), ref_norm(p.referencia_cliente))
-   or ref_norm(i.referencia_cliente) in (ref_norm(p.reference), ref_norm(p.referencia_cliente));
+where (ref_keys(i.referencia) || ref_keys(i.referencia_cliente))
+   && (ref_keys(p.reference) || ref_keys(p.referencia_cliente));
 
 -- VISTA PREVIA: previos en bodega que NO aparecen en el inventario (irían al historial).
 -- El Excel no trae GER10606, GER10607, GER10608 ni GER10610 (revisados el 26/10): se excluyen.
@@ -83,8 +87,8 @@ where p.estado = 'en_bodega'
   and upper(p.reference) not in ('GER10606', 'GER10607', 'GER10608', 'GER10610')
   and not exists (
     select 1 from inventario_fisico i
-    where ref_norm(i.referencia) in (ref_norm(p.reference), ref_norm(p.referencia_cliente))
-       or ref_norm(i.referencia_cliente) in (ref_norm(p.reference), ref_norm(p.referencia_cliente)))
+    where (ref_keys(i.referencia) || ref_keys(i.referencia_cliente))
+       && (ref_keys(p.reference) || ref_keys(p.referencia_cliente)))
 order by p.created_at;
 
 -- ===================== PARTE 2: mover a Historial de previos =====================
@@ -95,5 +99,5 @@ where p.estado = 'en_bodega'
   and upper(p.reference) not in ('GER10606', 'GER10607', 'GER10608', 'GER10610')
   and not exists (
     select 1 from inventario_fisico i
-    where ref_norm(i.referencia) in (ref_norm(p.reference), ref_norm(p.referencia_cliente))
-       or ref_norm(i.referencia_cliente) in (ref_norm(p.reference), ref_norm(p.referencia_cliente)));
+    where (ref_keys(i.referencia) || ref_keys(i.referencia_cliente))
+       && (ref_keys(p.reference) || ref_keys(p.referencia_cliente)));
