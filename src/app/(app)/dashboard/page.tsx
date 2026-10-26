@@ -187,12 +187,6 @@ export default async function DashboardPage({
           href="/dashboard?etapa=glosa_final"
           alerta={sinAsignar("glosa_final") > 0}
         />
-        <Kpi
-          titulo="Listos para facturar"
-          valor={porEtapa("glosado")}
-          detalle="Glosados"
-          href="/dashboard?etapa=glosado"
-        />
         <Kpi titulo="Pendientes de importar" valor={filas.length} detalle="Todos los que siguen en bodega" href="/previos" />
         <Kpi titulo="Importados este mes" valor={importadosMes ?? 0} detalle="Pasaron al historial" href="/historial" />
         <Kpi

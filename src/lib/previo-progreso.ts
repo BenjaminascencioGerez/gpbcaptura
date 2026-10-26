@@ -18,7 +18,7 @@ export const ETAPA_LABELS: Record<Etapa, string> = {
   glosa: "Confirmación de fracciones",
   documentacion: "Documentación",
   glosa_final: "Glosa",
-  glosado: "Glosado (listo para facturar)",
+  glosado: "Glosado",
   enviado_facturacion: "Enviado a facturación",
 };
 
