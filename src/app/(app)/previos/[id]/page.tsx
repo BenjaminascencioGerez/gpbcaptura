@@ -18,6 +18,8 @@ import { ClassifyPartidaDialog } from "./classify-partida-dialog";
 import { GlosarPartidaDialog } from "./glosar-partida-dialog";
 import { ImportMorePartidasDialog } from "./import-more-partidas-dialog";
 import { etiquetaPartida } from "@/lib/partida";
+import { AsignarDialog } from "./asignar-dialog";
+import { listarUsuariosConRol } from "@/lib/usuarios-server";
 import { EstadoButton } from "../estado-button";
 import { ESTADO_LABELS } from "@/lib/previo-progreso";
 
@@ -77,6 +79,15 @@ export default async function PrevioDetailPage({
     : { data: [] as ClasificacionArancelaria[] };
 
   const sinFacturaCount = rows.filter((p) => p.sin_factura).length;
+  const pendientesClasificar = rows.filter((p) => p.classification_status === "pendiente").length;
+  const sinFoto = rows.filter((p) => !p.photo_url && !(attachmentsByPartida.get(p.id)?.length)).length;
+  const asignables = readOnly
+    ? []
+    : await listarUsuariosConRol(["clasificador", "glosador", "administrador", "super_admin"]);
+  const clasificadores = asignables.filter((u) => u.role !== "glosador");
+  const glosadores = asignables.filter((u) => u.role !== "clasificador");
+  const fechaCorta = (iso: string) =>
+    new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" });
 
   // Un grupo por factura en el orden en que aparecen; las sin factura al final.
   // Con una sola factura (o ninguna) la tabla se ve sin encabezados de grupo.
@@ -96,7 +107,7 @@ export default async function PrevioDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link
             href={previo.estado === "importado" ? "/historial" : "/previos"}
@@ -113,10 +124,63 @@ export default async function PrevioDetailPage({
               {ESTADO_LABELS[previo.estado]}
             </Badge>
           </h1>
+          {(previo.enviado_clasificacion_at || previo.enviado_glosa_at) && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {previo.enviado_clasificacion_at && (
+                <>
+                  Clasificación: <span className="text-foreground">{previo.clasificador_nombre ?? "—"}</span> (
+                  {fechaCorta(previo.enviado_clasificacion_at)})
+                </>
+              )}
+              {previo.enviado_clasificacion_at && previo.enviado_glosa_at && " · "}
+              {previo.enviado_glosa_at && (
+                <>
+                  Glosa: <span className="text-foreground">{previo.glosador_nombre ?? "—"}</span> (
+                  {fechaCorta(previo.enviado_glosa_at)})
+                </>
+              )}
+            </p>
+          )}
         </div>
         {!readOnly && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <EstadoButton previoId={previo.id} estado={previo.estado} reference={previo.reference} />
+            {previo.status !== "sent" && (
+              <AsignarDialog
+                previoId={previo.id}
+                tipo="clasificacion"
+                usuarios={clasificadores}
+                asignadoId={previo.clasificador_id}
+                aviso={
+                  sinFoto > 0
+                    ? `${sinFoto} partida(s) todavía no tienen foto o documento de la revisión física.`
+                    : undefined
+                }
+                trigger={
+                  <Button variant={previo.enviado_clasificacion_at ? "outline" : "default"} disabled={rows.length === 0}>
+                    {previo.enviado_clasificacion_at ? "Reasignar clasificador" : "Enviar a clasificación"}
+                  </Button>
+                }
+              />
+            )}
+            {previo.status !== "sent" && previo.enviado_clasificacion_at && (
+              <AsignarDialog
+                previoId={previo.id}
+                tipo="glosa"
+                usuarios={glosadores}
+                asignadoId={previo.glosador_id}
+                aviso={
+                  pendientesClasificar > 0
+                    ? `Faltan ${pendientesClasificar} partida(s) por clasificar; no se puede enviar a glosa todavía.`
+                    : undefined
+                }
+                trigger={
+                  <Button variant={previo.enviado_glosa_at ? "outline" : "default"}>
+                    {previo.enviado_glosa_at ? "Reasignar glosador" : "Enviar a glosa"}
+                  </Button>
+                }
+              />
+            )}
             <SendToFacturacionButton previoId={previo.id} disabled={previo.status === "sent"} />
           </div>
         )}

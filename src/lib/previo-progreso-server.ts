@@ -5,7 +5,7 @@ import { calcularProgreso } from "./previo-progreso";
 type PartidaProgreso = Pick<Partida, "id" | "previo_id" | "photo_url" | "classification_status">;
 
 // Avance y etapa de varios previos con dos consultas (partidas + adjuntos).
-export async function cargarProgreso(supabase: SupabaseClient, previos: Pick<Previo, "id" | "status">[]) {
+export async function cargarProgreso(supabase: SupabaseClient, previos: Pick<Previo, "id" | "status" | "enviado_clasificacion_at" | "enviado_glosa_at">[]) {
   const previoIds = previos.map((p) => p.id);
 
   const { data: partidasData } = previoIds.length

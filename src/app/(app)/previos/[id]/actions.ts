@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { canClassify, canGlosar, isReadOnly } from "@/lib/roles";
 import { getCurrentRole } from "@/lib/roles-server";
-import { notifyEjecutivos } from "@/lib/notify";
+import { notifyEjecutivos, notifyUsuarios } from "@/lib/notify";
+import { listarUsuariosConRol } from "@/lib/usuarios-server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parsePrevioExcel } from "@/lib/previo-excel";
 import { asignarRevisorSiFalta } from "@/lib/revisor";
@@ -483,5 +484,102 @@ export async function sendToFacturacion(previoId: string) {
   revalidatePath(`/previos/${previoId}`);
   revalidatePath("/previos");
   revalidatePath("/historial");
+  return { error: "" };
+}
+
+// Asigna el previo a un clasificador; la Etapa pasa a Clasificación.
+export async function enviarAClasificacion(previoId: string, clasificadorId: string) {
+  const role = await getCurrentRole();
+  if (isReadOnly(role)) return { error: "Tu rol (Ejecutivo) solo tiene acceso de lectura." };
+
+  const clasificador = (await listarUsuariosConRol(["clasificador", "administrador", "super_admin"])).find(
+    (u) => u.id === clasificadorId
+  );
+  if (!clasificador) return { error: "Selecciona un usuario con rol de Clasificador." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { count: partidas } = await supabase
+    .from("partidas")
+    .select("id", { count: "exact", head: true })
+    .eq("previo_id", previoId);
+  if (!partidas) return { error: "El previo no tiene partidas para clasificar." };
+
+  const { data: previo, error } = await supabase
+    .from("previos")
+    .update({
+      clasificador_id: clasificador.id,
+      clasificador_nombre: clasificador.nombre,
+      enviado_clasificacion_at: new Date().toISOString(),
+      enviado_clasificacion_by: user?.id ?? null,
+    })
+    .eq("id", previoId)
+    .select("reference")
+    .single();
+  if (error || !previo) return { error: error?.message ?? "Previo no encontrado." };
+
+  await notifyUsuarios(
+    {
+      eventType: "previo_enviado_clasificacion",
+      previoId,
+      payload: { reference: previo.reference, clasificador: clasificador.nombre, partidas },
+    },
+    [clasificador.id]
+  );
+
+  revalidatePath(`/previos/${previoId}`);
+  revalidatePath("/previos");
+  revalidatePath("/dashboard");
+  return { error: "" };
+}
+
+// Asigna el previo a un glosador cuando ya están clasificadas todas sus partidas.
+export async function enviarAGlosa(previoId: string, glosadorId: string) {
+  const role = await getCurrentRole();
+  if (isReadOnly(role)) return { error: "Tu rol (Ejecutivo) solo tiene acceso de lectura." };
+
+  const glosador = (await listarUsuariosConRol(["glosador", "administrador", "super_admin"])).find(
+    (u) => u.id === glosadorId
+  );
+  if (!glosador) return { error: "Selecciona un usuario con rol de Glosador." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { count: pendientes } = await supabase
+    .from("partidas")
+    .select("id", { count: "exact", head: true })
+    .eq("previo_id", previoId)
+    .eq("classification_status", "pendiente");
+  if (pendientes && pendientes > 0) {
+    return { error: `Hay ${pendientes} partida(s) sin clasificar — clasifícalas antes de enviar a glosa.` };
+  }
+
+  const { data: previo, error } = await supabase
+    .from("previos")
+    .update({
+      glosador_id: glosador.id,
+      glosador_nombre: glosador.nombre,
+      enviado_glosa_at: new Date().toISOString(),
+      enviado_glosa_by: user?.id ?? null,
+    })
+    .eq("id", previoId)
+    .select("reference")
+    .single();
+  if (error || !previo) return { error: error?.message ?? "Previo no encontrado." };
+
+  await notifyUsuarios(
+    { eventType: "previo_enviado_glosa", previoId, payload: { reference: previo.reference, glosador: glosador.nombre } },
+    [glosador.id]
+  );
+
+  revalidatePath(`/previos/${previoId}`);
+  revalidatePath("/previos");
+  revalidatePath("/dashboard");
   return { error: "" };
 }

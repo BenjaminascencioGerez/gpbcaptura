@@ -1,7 +1,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type NotifyEvent = {
-  eventType: "partida_clasificada" | "previo_enviado_facturacion" | "partida_glosada";
+  eventType:
+    | "partida_clasificada"
+    | "previo_enviado_facturacion"
+    | "partida_glosada"
+    | "previo_enviado_clasificacion"
+    | "previo_enviado_glosa";
   previoId: string;
   partidaId?: string;
   payload: Record<string, unknown>;
@@ -12,6 +17,13 @@ type NotifyEvent = {
 // Si no hay proveedor configurado, el evento queda pendiente en notification_events
 // para que se pueda reenviar cuando se conecte uno.
 export async function notifyEjecutivos(event: NotifyEvent) {
+  const admin = createAdminClient();
+  const { data: ejecutivoRoles } = await admin.from("user_roles").select("user_id").eq("role", "ejecutivo");
+  await notifyUsuarios(event, (ejecutivoRoles ?? []).map((r) => r.user_id));
+}
+
+// Igual que notifyEjecutivos, pero a usuarios específicos (p. ej. el clasificador asignado).
+export async function notifyUsuarios(event: NotifyEvent, userIds: string[]) {
   const admin = createAdminClient();
 
   const { data: inserted } = await admin
@@ -29,16 +41,11 @@ export async function notifyEjecutivos(event: NotifyEvent) {
   const from = process.env.RESEND_FROM;
   if (!apiKey || !from || !inserted) return;
 
-  const { data: ejecutivoRoles } = await admin
-    .from("user_roles")
-    .select("user_id")
-    .eq("role", "ejecutivo");
-
-  if (!ejecutivoRoles || ejecutivoRoles.length === 0) return;
+  if (userIds.length === 0) return;
 
   const emails: string[] = [];
-  for (const r of ejecutivoRoles) {
-    const { data } = await admin.auth.admin.getUserById(r.user_id);
+  for (const userId of userIds) {
+    const { data } = await admin.auth.admin.getUserById(userId);
     if (data.user?.email) emails.push(data.user.email);
   }
   if (emails.length === 0) return;
@@ -65,6 +72,10 @@ function subjectFor(event: NotifyEvent): string {
       return `Partida glosada — ${event.payload.reference ?? ""}`;
     case "previo_enviado_facturacion":
       return `Previo enviado a facturación — ${event.payload.reference ?? ""}`;
+    case "previo_enviado_clasificacion":
+      return `Previo asignado para clasificación — ${event.payload.reference ?? ""}`;
+    case "previo_enviado_glosa":
+      return `Previo asignado para glosa — ${event.payload.reference ?? ""}`;
   }
 }
 
