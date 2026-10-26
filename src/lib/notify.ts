@@ -6,7 +6,10 @@ type NotifyEvent = {
     | "previo_enviado_facturacion"
     | "partida_glosada"
     | "previo_enviado_clasificacion"
-    | "previo_enviado_glosa";
+    | "previo_enviado_glosa"
+    | "partida_info_solicitada"
+    | "partida_devuelta"
+    | "previo_enviado_documentacion";
   previoId: string;
   partidaId?: string;
   payload: Record<string, unknown>;
@@ -75,7 +78,13 @@ function subjectFor(event: NotifyEvent): string {
     case "previo_enviado_clasificacion":
       return `Previo asignado para clasificación — ${event.payload.reference ?? ""}`;
     case "previo_enviado_glosa":
-      return `Previo asignado para glosa — ${event.payload.reference ?? ""}`;
+      return `Fracciones por confirmar — ${event.payload.reference ?? ""}`;
+    case "partida_info_solicitada":
+      return `Se solicita más información — ${event.payload.reference ?? ""} partida ${event.payload.partida ?? ""}`;
+    case "partida_devuelta":
+      return `Partida regresada a clasificación — ${event.payload.reference ?? ""} partida ${event.payload.partida ?? ""}`;
+    case "previo_enviado_documentacion":
+      return `Previo listo para documentación — ${event.payload.reference ?? ""}`;
   }
 }
 

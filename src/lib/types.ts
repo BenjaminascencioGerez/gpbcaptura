@@ -27,6 +27,8 @@ export type Previo = {
   glosador_nombre: string | null;
   enviado_glosa_at: string | null;
   enviado_glosa_by: string | null;
+  enviado_documentacion_at: string | null;
+  enviado_documentacion_by: string | null;
   created_by: string | null;
   created_at: string;
 };
@@ -67,6 +69,10 @@ export type Partida = {
   glosado_by: string | null;
   glosado_at: string | null;
   notas_glosa: string | null;
+  revision_estado: "info_solicitada" | "devuelta" | null;
+  revision_nota: string | null;
+  revision_by: string | null;
+  revision_at: string | null;
 };
 
 export type ClasificacionArancelaria = {
