@@ -27,6 +27,7 @@ export type Partida = {
   id: string;
   previo_id: string;
   no_partida: number | null;
+  factura: string | null;
   sin_factura: boolean;
   fraccion_arancelaria: string | null;
   nico: string | null;

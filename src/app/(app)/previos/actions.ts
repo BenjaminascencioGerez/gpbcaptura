@@ -7,6 +7,7 @@ import { parsePrevioExcel } from "@/lib/previo-excel";
 import { isReadOnly } from "@/lib/roles";
 import { getCurrentRole } from "@/lib/roles-server";
 import { nombreDeUsuario } from "@/lib/revisor";
+import { resumenPorFactura } from "@/lib/partida";
 
 export async function createPrevioManual(_prevState: { error: string } | null, formData: FormData) {
   const role = await getCurrentRole();
@@ -101,7 +102,13 @@ export async function importPrevioExcel(_prevState: { error: string } | null, fo
     return { error: `Previo creado, pero falló la carga de partidas: ${partidasError.message}` };
   }
 
-  redirect(`/previos/${previo.id}`);
+  // Con varias facturas se muestra al abrir el previo qué se cargó de cada una.
+  const facturas = new Set(partidas.filter((p) => p.factura).map((p) => p.factura));
+  redirect(
+    facturas.size > 0
+      ? `/previos/${previo.id}?carga=${encodeURIComponent(resumenPorFactura(partidas))}`
+      : `/previos/${previo.id}`
+  );
 }
 
 export async function setPrevioEstado(previoId: string, estado: "en_bodega" | "importado") {

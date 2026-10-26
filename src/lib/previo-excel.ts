@@ -26,6 +26,7 @@ export type ParsedPrevioHeader = {
 
 export type ParsedPartidaRow = {
   no_partida: number | null;
+  factura: string | null;
   sin_factura: boolean;
   fraccion_arancelaria: string | null;
   nico: string | null;
@@ -102,6 +103,12 @@ function findHeaderRow(sheet: ExcelJS.Worksheet): number | null {
   return null;
 }
 
+// "FACT-1456", "FACTURA 1456", "Fac 1456" -> "1456". Otro nombre -> null.
+export function facturaDeHoja(nombre: string): string | null {
+  const m = nombre.trim().match(/^fac(?:tura|t)?\.?\s*[-_#:.]?\s*(.*\d.*)$/i);
+  return m ? m[1].trim() : null;
+}
+
 function parseSheetPartidas(sheet: ExcelJS.Worksheet, startSortOrder: number): ParsedPartidaRow[] {
   const headerRow = findHeaderRow(sheet);
   if (headerRow === null) return [];
@@ -128,6 +135,7 @@ function parseSheetPartidas(sheet: ExcelJS.Worksheet, startSortOrder: number): P
 
     partidas.push({
       no_partida: noPartida,
+      factura: null,
       sin_factura: noPartida === null,
       fraccion_arancelaria: cellText(sheet.getCell(`C${row}`)),
       nico: cellText(sheet.getCell(`D${row}`)),
@@ -164,6 +172,7 @@ export async function parsePrevioExcel(
   const numbered: ParsedPartidaRow[] = [];
   const sinFactura: ParsedPartidaRow[] = [];
 
+  const hojas: { nombre: string; rows: ParsedPartidaRow[] }[] = [];
   for (const sheet of workbook.worksheets) {
     if (!header) {
       const reference = cellText(sheet.getCell("D11"));
@@ -177,11 +186,18 @@ export async function parsePrevioExcel(
         };
       }
     }
+    const rows = parseSheetPartidas(sheet, 0);
+    if (rows.length > 0) hojas.push({ nombre: sheet.name, rows });
+  }
 
-    const rows = parseSheetPartidas(sheet, numbered.length + sinFactura.length);
-    for (const row of rows) {
+  // Cada hoja es una factura: se toma de su nombre (FACT-1456 -> 1456). Con
+  // varias hojas, una hoja con otro nombre usa el nombre tal cual para que
+  // sus partidas no se mezclen con las de otra factura.
+  for (const hoja of hojas) {
+    const factura = facturaDeHoja(hoja.nombre) ?? (hojas.length > 1 ? hoja.nombre.trim() : null);
+    for (const row of hoja.rows) {
       if (row.sin_factura) sinFactura.push(row);
-      else numbered.push(row);
+      else numbered.push({ ...row, factura });
     }
   }
 
